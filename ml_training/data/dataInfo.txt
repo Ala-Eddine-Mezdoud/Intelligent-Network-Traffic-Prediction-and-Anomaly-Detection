@@ -1,0 +1,321 @@
+# CICIDS2017 — Intrusion Detection Evaluation Dataset
+> **Source:** Canadian Institute for Cybersecurity (CIC), University of New Brunswick (UNB)  
+> **Official Page:** [UNB CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html)
+
+---
+
+## 1. Overview
+
+The **CICIDS2017** dataset is a comprehensive, labeled network intrusion detection benchmark released by the Canadian Institute for Cybersecurity. It was designed to address the critical shortcomings of the eleven existing IDS datasets evaluated since 1998 — most of which were found to be outdated, unreliable, lacking in traffic diversity, or missing key metadata and feature sets.
+
+The dataset contains **both benign traffic and the most up-to-date common attack types**, captured over 5 consecutive days (Monday July 3 – Friday July 7, 2017). It is structured to closely resemble real-world network behavior.
+
+---
+
+## 2. Key Design Criteria
+
+The dataset was constructed to satisfy **11 criteria** identified in the authors' evaluation framework (Gharib et al., 2016). No previous IDS dataset had satisfied all 11 simultaneously.
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | **Complete Network Configuration** | Full topology: Modem, Firewall, Switches, Routers, and multiple OSes (Windows, Ubuntu, Mac OS X) |
+| 2 | **Complete Traffic** | 12 victim machines + user profiling agent + real attacks from a dedicated attack network |
+| 3 | **Labelled Dataset** | All flows labeled with benign/attack class, with precise timestamps |
+| 4 | **Complete Interaction** | Covers both intra-LAN (within network) and Internet communication |
+| 5 | **Complete Capture** | Mirror port / tap used — all packets captured and stored on a storage server |
+| 6 | **Available Protocols** | HTTP, HTTPS, FTP, SSH, and email protocols all present |
+| 7 | **Attack Diversity** | 8 attack categories based on the 2016 McAfee threat report |
+| 8 | **Heterogeneity** | Traffic from main switch + memory dumps + system calls from victim machines |
+| 9 | **Feature Set** | 80+ network flow features extracted via **CICFlowMeter**, delivered as CSV |
+| 10 | **Metadata** | Fully documented: timestamps, attack schedules, flow labels, and network topology |
+
+---
+
+## 3. Traffic Generation
+
+Background traffic was generated using the **B-Profile system** (Sharafaldin et al., 2016), which profiles abstract human behavior and generates naturalistic benign traffic. The dataset simulates **25 users** interacting via:
+
+- HTTP / HTTPS
+- FTP
+- SSH
+- Email (SMTP/IMAP/POP3)
+
+---
+
+## 4. Dataset Files
+
+| Format | Contents |
+|--------|----------|
+| **PCAP** | Full packet payloads — raw network captures |
+| **GeneratedLabelledFlows.zip** | Labeled network flows with timestamps and metadata |
+| **MachineLearningCSV.zip** | 80+ feature CSVs ready for ML/DL training and evaluation |
+
+---
+
+## 5. Capture Period & Daily Breakdown
+
+| Day | Date | Description | Size |
+|-----|------|-------------|------|
+| Monday | July 3, 2017 | Benign traffic only (baseline) | 11.0 GB |
+| Tuesday | July 4, 2017 | Brute Force attacks + Normal Activity | 11.0 GB |
+| Wednesday | July 5, 2017 | DoS / DDoS + Heartbleed + Normal Activity | 13.0 GB |
+| Thursday | July 6, 2017 | Web Attacks + Infiltration + Normal Activity | 7.8 GB |
+| Friday | July 7, 2017 | Botnet + Port Scan + DDoS + Normal Activity | 8.3 GB |
+
+> **Total capture window:** 9:00 AM Monday — 5:00 PM Friday (5 days)
+
+---
+
+## 6. Network Topology
+
+### 6.1 Firewall / Gateway
+| Role | IP Address |
+|------|------------|
+| Firewall (Public) | `205.174.165.80` |
+| Firewall (Internal) | `172.16.0.1` |
+
+### 6.2 Internal Infrastructure
+| Role | IP Address |
+|------|------------|
+| DNS + Domain Controller Server | `192.168.10.3` |
+
+### 6.3 Attacker Network (Outsiders)
+| Machine | IP Address |
+|---------|------------|
+| Kali Linux (primary attacker) | `205.174.165.73` |
+| Windows Attack Machine 1 | `205.174.165.69` |
+| Windows Attack Machine 2 | `205.174.165.70` |
+| Windows Attack Machine 3 | `205.174.165.71` |
+
+### 6.4 Victim Network (Insiders — 12 Machines)
+| Machine | Public IP | Local IP |
+|---------|-----------|----------|
+| Web Server Ubuntu 16 | `205.174.165.68` | `192.168.10.50` |
+| Ubuntu Server 12 | `205.174.165.66` | `192.168.10.51` |
+| Ubuntu 14.4 (32-bit) | — | `192.168.10.19` |
+| Ubuntu 14.4 (64-bit) | — | `192.168.10.17` |
+| Ubuntu 16.4 (32-bit) | — | `192.168.10.16` |
+| Ubuntu 16.4 (64-bit) | — | `192.168.10.12` |
+| Windows 7 Pro (64-bit) | — | `192.168.10.9` |
+| Windows 8.1 (64-bit) | — | `192.168.10.5` |
+| Windows Vista (64-bit) | — | `192.168.10.8` |
+| Windows 10 Pro (32-bit) | — | `192.168.10.14` |
+| Windows 10 (64-bit) | — | `192.168.10.15` |
+| Mac OS X | — | `192.168.10.25` |
+
+---
+
+## 7. Attack Schedule (Day-by-Day)
+
+### Monday, July 3, 2017 — Benign Only
+- **No attacks.** Only normal human activity traffic to serve as the clean baseline.
+
+---
+
+### Tuesday, July 4, 2017 — Brute Force
+
+#### FTP-Patator
+| Field | Detail |
+|-------|--------|
+| Time | 9:20 – 10:20 AM |
+| Attack Type | FTP Brute Force (Patator) |
+| Attacker | Kali — `205.174.165.73` |
+| Victim | Web Server Ubuntu — `205.174.165.68` (LAN: `192.168.10.50`) |
+
+#### SSH-Patator
+| Field | Detail |
+|-------|--------|
+| Time | 14:00 – 15:00 PM |
+| Attack Type | SSH Brute Force (Patator) |
+| Attacker | Kali — `205.174.165.73` |
+| Victim | Web Server Ubuntu — `205.174.165.68` (LAN: `192.168.10.50`) |
+
+**NAT Flow (both attacks):**
+```
+Attack: 205.174.165.73 → 205.174.165.80 (Firewall) → 172.16.0.1 → 192.168.10.50
+Reply:  192.168.10.50 → 172.16.0.1 → 205.174.165.80 → 205.174.165.73
+```
+
+---
+
+### Wednesday, July 5, 2017 — DoS / DDoS + Heartbleed
+
+#### DoS Attacks (Morning)
+| Attack | Tool | Time |
+|--------|------|------|
+| DoS Slowloris | Slowloris | 9:47 – 10:10 AM |
+| DoS Slowhttptest | Slowhttptest | 10:14 – 10:35 AM |
+| DoS Hulk | HULK | 10:43 – 11:00 AM |
+| DoS GoldenEye | GoldenEye | 11:10 – 11:23 AM |
+
+- **Attacker:** Kali — `205.174.165.73`
+- **Victim:** Web Server Ubuntu — `205.174.165.68` (LAN: `192.168.10.50`)
+
+**NAT Flow:**
+```
+Attack: 205.174.165.73 → 205.174.165.80 → 172.16.0.1 → 192.168.10.50
+Reply:  192.168.10.50 → 172.16.0.1 → 205.174.165.80 → 205.174.165.73
+```
+
+#### Heartbleed (Afternoon)
+| Field | Detail |
+|-------|--------|
+| Time | 15:12 – 15:32 PM |
+| Port | 444 |
+| Attacker | Kali — `205.174.165.73` |
+| Victim | Ubuntu Server 12 — `205.174.165.66` (LAN: `192.168.10.51`) |
+
+**NAT Flow:**
+```
+Attack: 205.174.165.73 → 205.174.165.80 → 172.16.0.11 → 192.168.10.51
+Reply:  192.168.10.51 → 172.16.0.1 → 205.174.165.80 → 205.174.165.73
+```
+
+---
+
+### Thursday, July 6, 2017 — Web Attacks + Infiltration
+
+#### Morning — Web Attacks
+| Attack | Time |
+|--------|------|
+| Web Attack – Brute Force | 9:20 – 10:00 AM |
+| Web Attack – XSS (Cross-Site Scripting) | 10:15 – 10:35 AM |
+| Web Attack – SQL Injection | 10:40 – 10:42 AM |
+
+- **Attacker:** Kali — `205.174.165.73`
+- **Victim:** Web Server Ubuntu — `205.174.165.68` (LAN: `192.168.10.50`)
+
+**NAT Flow:**
+```
+Attack: 205.174.165.73 → 205.174.165.80 → 172.16.0.1 → 192.168.10.50
+Reply:  192.168.10.50 → 172.16.0.1 → 205.174.165.80 → 205.174.165.73
+```
+
+#### Afternoon — Infiltration (Multi-stage)
+
+**Stage 1 — Dropbox Download / Metasploit on Windows Vista**
+| Field | Detail |
+|-------|--------|
+| Time | 14:19 – 14:21 PM, 14:33 – 14:35 PM |
+| Method | Metasploit exploit via malicious Dropbox-hosted payload |
+| Attacker | Kali — `205.174.165.73` |
+| Victim | Windows Vista — `192.168.10.8` |
+
+**Stage 2 — Cool Disk / MAC Infiltration**
+| Field | Detail |
+|-------|--------|
+| Time | 14:53 – 15:00 PM |
+| Method | Cool Disk exploit |
+| Attacker | Kali — `205.174.165.73` |
+| Victim | Mac OS X — `192.168.10.25` |
+
+**Stage 3 — Lateral Movement (Portscan + Nmap)**
+| Field | Detail |
+|-------|--------|
+| Time | 15:04 – 15:45 PM |
+| Method | Compromised Vista used as pivot to scan all other clients |
+| Attacker (pivot) | Windows Vista — `192.168.10.8` (compromised) |
+| Victims | All other internal clients |
+
+---
+
+### Friday, July 7, 2017 — Botnet + Port Scan + DDoS
+
+#### Morning — Botnet ARES
+| Field | Detail |
+|-------|--------|
+| Time | 10:02 – 11:02 AM |
+| Botnet | ARES |
+| Attacker | Kali — `205.174.165.73` |
+| Victims | Win 10 (`192.168.10.15`), Win 7 (`192.168.10.9`), Win 10 (`192.168.10.14`), Win 8.1 (`192.168.10.5`), Vista (`192.168.10.8`) |
+
+#### Afternoon — Port Scan
+
+**With Firewall Rules ON** (intervals):
+```
+13:55–13:57, 13:58–14:00, 14:01–14:04, 14:05–14:07, 14:08–14:10,
+14:11–14:13, 14:14–14:16, 14:17–14:19, 14:20–14:21, 14:22–14:24,
+14:33–14:33, 14:35–14:35
+```
+
+**With Firewall Rules OFF** (Nmap scan types):
+| Nmap Flag | Time |
+|-----------|------|
+| `-sS` (SYN Stealth) | 14:51 – 14:53 |
+| `-sT` (TCP Connect) | 14:54 – 14:56 |
+| `-sF` (FIN) | 14:57 – 14:59 |
+| `-sX` (Xmas) | 15:00 – 15:02 |
+| `-sN` (Null) | 15:03 – 15:05 |
+| `-sP` (Ping) | 15:06 – 15:07 |
+| `-sV` (Version Detection) | 15:08 – 15:10 |
+| `-sU` (UDP) | 15:11 – 15:12 |
+| `-sO` (Protocol) | 15:13 – 15:15 |
+| `-sA` (ACK) | 15:16 – 15:18 |
+| `-sW` (Window) | 15:19 – 15:21 |
+| `-sR` (RPC) | 15:22 – 15:24 |
+| `-sL` (List) | 15:25 – 15:25 |
+| `-sI` (Idle/Zombie) | 15:26 – 15:27 |
+| `-b` (FTP Bounce) | 15:28 – 15:29 |
+
+- **Attacker:** Kali — `205.174.165.73`
+- **Victim:** Ubuntu 16 — `205.174.165.68` (LAN: `192.168.10.50`)
+
+**NAT Flow:**
+```
+Attacker: 205.174.165.73 → 205.174.165.80 (Firewall) → 172.16.0.1
+```
+
+#### Afternoon — DDoS LOIT
+| Field | Detail |
+|-------|--------|
+| Time | 15:56 – 16:16 PM |
+| Tool | LOIC/LOIT |
+| Attackers | Win 8.1 × 3 — `205.174.165.69`, `205.174.165.70`, `205.174.165.71` |
+| Victim | Ubuntu 16 — `205.174.165.68` (LAN: `192.168.10.50`) |
+
+**NAT Flow:**
+```
+Attackers: 205.174.165.69/70/71 → 205.174.165.80 (Firewall) → 172.16.0.1
+```
+
+---
+
+## 8. Attack Type Summary
+
+| Attack Category | Specific Attacks | Day |
+|-----------------|-----------------|-----|
+| **Brute Force** | FTP-Patator, SSH-Patator | Tuesday |
+| **DoS** | Slowloris, Slowhttptest, HULK, GoldenEye | Wednesday |
+| **Heartbleed** | CVE-2014-0160 (Port 444) | Wednesday |
+| **Web Attacks** | Brute Force, XSS, SQL Injection | Thursday |
+| **Infiltration** | Metasploit, Cool Disk, Lateral Movement (Nmap) | Thursday |
+| **Botnet** | ARES botnet | Friday |
+| **Port Scan** | 15 Nmap scan techniques, with/without firewall | Friday |
+| **DDoS** | LOIT (3 coordinated Windows machines) | Friday |
+
+---
+
+## 9. Citation
+
+If using this dataset in research, cite the following paper:
+
+> Iman Sharafaldin, Arash Habibi Lashkari, and Ali A. Ghorbani,
+> **"Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization"**,
+> *4th International Conference on Information Systems Security and Privacy (ICISSP)*,
+> Portugal, January 2018.
+
+---
+
+## 10. License & Access
+
+The dataset is **publicly available** for researchers:
+
+- **PCAP files** — raw packet captures
+- **GeneratedLabelledFlows.zip** — labeled network flows
+- **MachineLearningCSV.zip** — 80+ feature CSVs for ML/DL use
+
+> ⚠️ Usage requires citation of the paper above.
+
+---
+
+*Document compiled from official UNB/CIC dataset description.*
