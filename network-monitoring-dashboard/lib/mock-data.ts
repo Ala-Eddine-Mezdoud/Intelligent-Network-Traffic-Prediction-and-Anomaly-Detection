@@ -1,0 +1,138 @@
+// Mock data for the cybersecurity dashboard
+
+export const trafficData = [
+  { time: '00:00', traffic: 45, predicted: 48 },
+  { time: '01:00', traffic: 52, predicted: 55 },
+  { time: '02:00', traffic: 38, predicted: 42 },
+  { time: '03:00', traffic: 28, predicted: 32 },
+  { time: '04:00', traffic: 22, predicted: 25 },
+  { time: '05:00', traffic: 25, predicted: 28 },
+  { time: '06:00', traffic: 35, predicted: 38 },
+  { time: '07:00', traffic: 55, predicted: 58 },
+  { time: '08:00', traffic: 68, predicted: 70 },
+  { time: '09:00', traffic: 82, predicted: 80 },
+  { time: '10:00', traffic: 95, predicted: 92 },
+  { time: '11:00', traffic: 88, predicted: 85 },
+  { time: '12:00', traffic: 78, predicted: 75 },
+  { time: '13:00', traffic: 85, predicted: 88 },
+  { time: '14:00', traffic: 92, predicted: 90 },
+  { time: '15:00', traffic: 98, predicted: 95 },
+  { time: '16:00', traffic: 105, predicted: 100 },
+  { time: '17:00', traffic: 112, predicted: 108 },
+  { time: '18:00', traffic: 108, predicted: 105 },
+  { time: '19:00', traffic: 95, predicted: 98 },
+  { time: '20:00', traffic: 82, predicted: 85 },
+  { time: '21:00', traffic: 68, predicted: 70 },
+  { time: '22:00', traffic: 58, predicted: 60 },
+  { time: '23:00', traffic: 52, predicted: 55 },
+];
+
+export const predictionData = [
+  { time: '00:00', historical: 45, predicted: 45, upper: 52, lower: 38 },
+  { time: '01:00', historical: 52, predicted: 55, upper: 63, lower: 47 },
+  { time: '02:00', historical: 38, predicted: 42, upper: 50, lower: 34 },
+  { time: '03:00', historical: 28, predicted: 32, upper: 40, lower: 24 },
+  { time: '04:00', historical: 22, predicted: 25, upper: 33, lower: 17 },
+  { time: '05:00', historical: 25, predicted: 28, upper: 36, lower: 20 },
+  { time: '06:00', historical: null, predicted: 38, upper: 46, lower: 30 },
+  { time: '07:00', historical: null, predicted: 58, upper: 66, lower: 50 },
+  { time: '08:00', historical: null, predicted: 70, upper: 78, lower: 62 },
+  { time: '09:00', historical: null, predicted: 80, upper: 88, lower: 72 },
+  { time: '10:00', historical: null, predicted: 92, upper: 100, lower: 84 },
+  { time: '11:00', historical: null, predicted: 85, upper: 93, lower: 77 },
+  { time: '12:00', historical: null, predicted: 75, upper: 83, lower: 67 },
+];
+
+export const protocolData = [
+  { name: 'HTTPS', value: 45 },
+  { name: 'HTTP', value: 20 },
+  { name: 'SSH', value: 18 },
+  { name: 'DNS', value: 12 },
+  { name: 'FTP', value: 5 },
+];
+
+export const anomalies = [
+  {
+    id: '1',
+    timestamp: '2024-02-17 14:23:45',
+    sourceIp: '192.168.1.105',
+    destIp: '10.0.0.50',
+    threatType: 'Port Scanning',
+    severity: 'High',
+    status: 'Ongoing',
+  },
+  {
+    id: '2',
+    timestamp: '2024-02-17 13:15:22',
+    sourceIp: '172.16.0.42',
+    destIp: '192.168.0.1',
+    threatType: 'DDoS Pattern',
+    severity: 'High',
+    status: 'Resolved',
+  },
+  {
+    id: '3',
+    timestamp: '2024-02-17 12:48:10',
+    sourceIp: '203.0.113.18',
+    destIp: '10.0.1.200',
+    threatType: 'Unusual Bandwidth',
+    severity: 'Medium',
+    status: 'Resolved',
+  },
+  {
+    id: '4',
+    timestamp: '2024-02-17 11:32:05',
+    sourceIp: '198.51.100.5',
+    destIp: '192.168.2.50',
+    threatType: 'Failed Authentication',
+    severity: 'Low',
+    status: 'Resolved',
+  },
+  {
+    id: '5',
+    timestamp: '2024-02-17 10:15:33',
+    sourceIp: '192.168.1.200',
+    destIp: '10.0.2.100',
+    threatType: 'Policy Violation',
+    severity: 'Medium',
+    status: 'Ongoing',
+  },
+];
+
+export const alerts = [
+  {
+    id: '1',
+    title: 'Critical: Suspicious Login Attempt',
+    description: 'Multiple failed authentication attempts from IP 192.168.1.105 detected.',
+    time: '5 minutes ago',
+    severity: 'High',
+  },
+  {
+    id: '2',
+    title: 'Warning: High Traffic Volume',
+    description: 'Network traffic exceeded baseline by 45%. Current: 112 Mbps, Baseline: 75 Mbps.',
+    time: '12 minutes ago',
+    severity: 'Medium',
+  },
+  {
+    id: '3',
+    title: 'Info: Vulnerability Scan Initiated',
+    description: 'Scheduled security scan started on internal network.',
+    time: '1 hour ago',
+    severity: 'Low',
+  },
+  {
+    id: '4',
+    title: 'Critical: Malware Detected',
+    description: 'Potential malware signature matched in outgoing traffic on port 443.',
+    time: '2 hours ago',
+    severity: 'High',
+  },
+  {
+    id: '5',
+    title: 'Warning: Certificate Expiration',
+    description: 'SSL certificate for domain example.com expires in 7 days.',
+    time: '3 hours ago',
+    severity: 'Medium',
+  },
+];
