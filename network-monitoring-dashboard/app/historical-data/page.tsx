@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -23,26 +23,63 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { getHistoricalData, getHistoricalStats } from '@/lib/api';
 
-const weeklyData = [
-  { day: 'Mon', traffic: 65, anomalies: 3 },
-  { day: 'Tue', traffic: 72, anomalies: 5 },
-  { day: 'Wed', traffic: 68, anomalies: 2 },
-  { day: 'Thu', traffic: 82, anomalies: 4 },
-  { day: 'Fri', traffic: 90, anomalies: 6 },
-  { day: 'Sat', traffic: 55, anomalies: 1 },
-  { day: 'Sun', traffic: 48, anomalies: 2 },
-];
+interface WeeklyDataPoint {
+  day: string;
+  traffic: number;
+  anomalies: number;
+}
 
-const monthlyData = [
-  { week: 'Week 1', traffic: 450, peak: 95 },
-  { week: 'Week 2', traffic: 480, peak: 105 },
-  { week: 'Week 3', traffic: 520, peak: 112 },
-  { week: 'Week 4', traffic: 490, peak: 110 },
-];
+interface MonthlyDataPoint {
+  week: string;
+  traffic: number;
+  peak: number;
+}
+
+interface HistoricalStats {
+  average_traffic_mbps: number;
+  peak_traffic_mbps: number;
+  total_anomalies: number;
+  avg_response_time_ms: number;
+}
 
 export default function HistoricalData() {
   const [timeRange, setTimeRange] = useState('week');
+  const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>([]);
+  const [monthlyData, setMonthlyData] = useState<MonthlyDataPoint[]>([]);
+  const [stats, setStats] = useState<HistoricalStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [dataRes, statsRes] = await Promise.all([
+          getHistoricalData(timeRange),
+          getHistoricalStats(),
+        ]);
+        setWeeklyData(dataRes.weekly_data);
+        setMonthlyData(dataRes.monthly_data);
+        setStats(statsRes);
+      } catch (error) {
+        console.error('Failed to fetch historical data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [timeRange]);
+
+  if (isLoading || !stats) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -177,7 +214,7 @@ export default function HistoricalData() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">68.3 Mbps</div>
+              <div className="text-3xl font-bold text-accent">{stats.average_traffic_mbps} Mbps</div>
             </CardContent>
           </Card>
 
@@ -188,7 +225,7 @@ export default function HistoricalData() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">112 Mbps</div>
+              <div className="text-3xl font-bold text-accent">{stats.peak_traffic_mbps} Mbps</div>
             </CardContent>
           </Card>
 
@@ -199,7 +236,7 @@ export default function HistoricalData() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-red-500">23</div>
+              <div className="text-3xl font-bold text-red-500">{stats.total_anomalies}</div>
             </CardContent>
           </Card>
 
@@ -210,7 +247,7 @@ export default function HistoricalData() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">42ms</div>
+              <div className="text-3xl font-bold text-accent">{stats.avg_response_time_ms}ms</div>
             </CardContent>
           </Card>
         </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   ComposedChart,
   Line,
@@ -13,9 +14,66 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DashboardLayout } from '@/components/dashboard-layout';
-import { predictionData } from '@/lib/mock-data';
+import { getPredictions, getModelMetrics, getModelInfo } from '@/lib/api';
+
+interface PredictionPoint {
+  time: string;
+  historical: number | null;
+  predicted: number;
+  upper: number;
+  lower: number;
+}
+
+interface ModelMetrics {
+  mae_mbps: number;
+  rmse_mbps: number;
+  accuracy_percent: number;
+}
+
+interface ModelInfo {
+  model_type: string;
+  training_data: string;
+  last_updated: string;
+  prediction_horizon: string;
+}
 
 export default function TrafficPrediction() {
+  const [predictionData, setPredictionData] = useState<PredictionPoint[]>([]);
+  const [metrics, setMetrics] = useState<ModelMetrics | null>(null);
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [predictionsRes, metricsRes, infoRes] = await Promise.all([
+          getPredictions(),
+          getModelMetrics(),
+          getModelInfo(),
+        ]);
+        setPredictionData(predictionsRes.data);
+        setMetrics(metricsRes);
+        setModelInfo(infoRes);
+      } catch (error) {
+        console.error('Failed to fetch prediction data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  if (isLoading || !metrics || !modelInfo) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -106,7 +164,7 @@ export default function TrafficPrediction() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">3.2 Mbps</div>
+              <div className="text-3xl font-bold text-accent">{metrics.mae_mbps} Mbps</div>
               <p className="text-xs text-muted-foreground mt-2">
                 Average prediction deviation
               </p>
@@ -120,7 +178,7 @@ export default function TrafficPrediction() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">4.7 Mbps</div>
+              <div className="text-3xl font-bold text-accent">{metrics.rmse_mbps} Mbps</div>
               <p className="text-xs text-muted-foreground mt-2">
                 Squared error measurement
               </p>
@@ -134,7 +192,7 @@ export default function TrafficPrediction() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">94.8%</div>
+              <div className="text-3xl font-bold text-accent">{metrics.accuracy_percent}%</div>
               <p className="text-xs text-muted-foreground mt-2">
                 Overall prediction accuracy
               </p>
@@ -152,26 +210,26 @@ export default function TrafficPrediction() {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Model Type</h3>
                 <p className="text-muted-foreground">
-                  Long Short-Term Memory (LSTM) Neural Network
+                  {modelInfo.model_type}
                 </p>
               </div>
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Training Data</h3>
                 <p className="text-muted-foreground">
-                  90 days of historical network traffic
+                  {modelInfo.training_data}
                 </p>
               </div>
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Last Updated</h3>
                 <p className="text-muted-foreground">
-                  2024-02-17 at 14:30 UTC
+                  {modelInfo.last_updated}
                 </p>
               </div>
               <div>
                 <h3 className="font-semibold text-foreground mb-2">
                   Prediction Horizon
                 </h3>
-                <p className="text-muted-foreground">6 hours ahead</p>
+                <p className="text-muted-foreground">{modelInfo.prediction_horizon}</p>
               </div>
             </div>
           </CardContent>

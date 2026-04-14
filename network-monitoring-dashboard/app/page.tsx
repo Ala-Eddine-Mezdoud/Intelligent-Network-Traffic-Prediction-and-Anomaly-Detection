@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Zap, TrendingUp } from 'lucide-react';
 import {
   LineChart,
@@ -19,15 +20,90 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { MetricCard } from '@/components/metric-card';
-import { trafficData, protocolData } from '@/lib/mock-data';
+import {
+  getCurrentMetrics,
+  getHistoricalTraffic,
+  getTrafficPrediction,
+  getProtocolDistribution,
+  getSystemStatus,
+} from '@/lib/api';
 
 const COLORS = ['#a78bfa', '#67e8f9', '#ef4444', '#fbbf24', '#6366f1'];
 
+interface MetricsData {
+  current_traffic_mbps: number;
+  active_connections: number;
+  anomaly_score_percent: number;
+  alerts_today: number;
+}
+
+interface TrafficPoint {
+  time: string;
+  traffic: number;
+  predicted: number;
+}
+
+interface PredictionPoint {
+  time: string;
+  predicted: number;
+  upper: number;
+  lower: number;
+}
+
+interface ProtocolItem {
+  name: string;
+  value: number;
+}
+
+interface SystemStatus {
+  network_health_percent: number;
+  anomaly_detection_percent: number;
+  system_uptime_percent: number;
+  threat_level: string;
+}
+
 export default function Dashboard() {
-  const currentTraffic = 112;
-  const activeConnections = 2847;
-  const anomalyScore = 18.5;
-  const alertsToday = 7;
+  const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [trafficData, setTrafficData] = useState<TrafficPoint[]>([]);
+  const [predictionData, setPredictionData] = useState<PredictionPoint[]>([]);
+  const [protocolData, setProtocolData] = useState<ProtocolItem[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [metricsRes, trafficRes, predictionRes, protocolRes, statusRes] = await Promise.all([
+          getCurrentMetrics(),
+          getHistoricalTraffic(),
+          getTrafficPrediction(),
+          getProtocolDistribution(),
+          getSystemStatus(),
+        ]);
+        setMetrics(metricsRes);
+        setTrafficData(trafficRes.data);
+        setPredictionData(predictionRes.data);
+        setProtocolData(protocolRes.data);
+        setSystemStatus(statusRes);
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  if (isLoading || !metrics || !systemStatus) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -35,7 +111,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Current Traffic"
-          value={currentTraffic}
+          value={metrics.current_traffic_mbps}
           unit="Mbps"
           icon={<Zap className="h-5 w-5" />}
           trend="up"
@@ -44,7 +120,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Active Connections"
-          value={activeConnections}
+          value={metrics.active_connections}
           icon={<Activity className="h-5 w-5" />}
           trend="stable"
           trendValue="Stable"
@@ -52,7 +128,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Anomaly Score"
-          value={anomalyScore}
+          value={metrics.anomaly_score_percent}
           unit="%"
           icon={<AlertTriangle className="h-5 w-5" />}
           trend="down"
@@ -61,7 +137,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Alerts Today"
-          value={alertsToday}
+          value={metrics.alerts_today}
           icon={<TrendingUp className="h-5 w-5" />}
           trend="up"
           trendValue="3 critical"
@@ -124,16 +200,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart
-                data={[
-                  { time: '00:00', predicted: 45, upper: 52, lower: 38 },
-                  { time: '01:00', predicted: 55, upper: 63, lower: 47 },
-                  { time: '02:00', predicted: 42, upper: 50, lower: 34 },
-                  { time: '03:00', predicted: 32, upper: 40, lower: 24 },
-                  { time: '04:00', predicted: 25, upper: 33, lower: 17 },
-                  { time: '05:00', predicted: 28, upper: 36, lower: 20 },
-                ]}
-              >
+              <AreaChart data={predictionData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
                 <XAxis
                   dataKey="time"
@@ -227,37 +294,39 @@ export default function Dashboard() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Network Health</span>
-                <span className="text-sm font-semibold text-green-500">98%</span>
+                <span className="text-sm font-semibold text-green-500">{systemStatus.network_health_percent}%</span>
               </div>
               <div className="h-2 rounded-full bg-muted">
-                <div className="h-full w-[98%] rounded-full bg-green-500" />
+                <div className="h-full rounded-full bg-green-500" style={{ width: `${systemStatus.network_health_percent}%` }} />
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Anomaly Detection</span>
-                <span className="text-sm font-semibold text-accent">95%</span>
+                <span className="text-sm font-semibold text-accent">{systemStatus.anomaly_detection_percent}%</span>
               </div>
               <div className="h-2 rounded-full bg-muted">
-                <div className="h-full w-[95%] rounded-full bg-accent" />
+                <div className="h-full rounded-full bg-accent" style={{ width: `${systemStatus.anomaly_detection_percent}%` }} />
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">System Uptime</span>
-                <span className="text-sm font-semibold text-green-500">99.9%</span>
+                <span className="text-sm font-semibold text-green-500">{systemStatus.system_uptime_percent}%</span>
               </div>
               <div className="h-2 rounded-full bg-muted">
-                <div className="h-full w-[99.9%] rounded-full bg-green-500" />
+                <div className="h-full rounded-full bg-green-500" style={{ width: `${systemStatus.system_uptime_percent}%` }} />
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Threat Level</span>
-                <span className="text-sm font-semibold text-yellow-500">Medium</span>
+                <span className={`text-sm font-semibold ${systemStatus.threat_level === 'Low' ? 'text-green-500' : systemStatus.threat_level === 'Medium' ? 'text-yellow-500' : 'text-red-500'}`}>
+                  {systemStatus.threat_level}
+                </span>
               </div>
               <div className="h-2 rounded-full bg-muted">
-                <div className="h-full w-[65%] rounded-full bg-yellow-500" />
+                <div className={`h-full rounded-full ${systemStatus.threat_level === 'Low' ? 'bg-green-500' : systemStatus.threat_level === 'Medium' ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${systemStatus.threat_level === 'Low' ? '33%' : systemStatus.threat_level === 'Medium' ? '66%' : '100%'}` }} />
               </div>
             </div>
           </CardContent>

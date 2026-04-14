@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,22 +15,79 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { getSettings, updateSettings, retrainModel } from '@/lib/api';
+
+interface SettingsData {
+  system_name: string;
+  refresh_interval_seconds: number;
+  alert_threshold_mbps: number;
+  anomaly_detection: boolean;
+  email_alerts: boolean;
+  slack_notifications: boolean;
+  theme: string;
+}
 
 export default function Settings() {
-  const [settings, setSettings] = useState({
-    systemName: 'Network Traffic Monitor',
-    refreshInterval: '30',
-    alertThreshold: '80',
-    anomalyDetection: true,
-    emailAlerts: true,
-    slackNotifications: false,
-    theme: 'dark',
-  });
+  const [settings, setSettings] = useState<SettingsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRetraining, setIsRetraining] = useState(false);
 
-  const handleSave = () => {
-    // In a real app, this would save to backend
-    console.log('Settings saved:', settings);
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const res = await getSettings();
+        setSettings(res);
+      } catch (error) {
+        console.error('Failed to fetch settings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    if (!settings) return;
+    setIsSaving(true);
+    try {
+      await updateSettings({
+        system_name: settings.system_name,
+        refresh_interval_seconds: settings.refresh_interval_seconds,
+        alert_threshold_mbps: settings.alert_threshold_mbps,
+        anomaly_detection: settings.anomaly_detection,
+        email_alerts: settings.email_alerts,
+        slack_notifications: settings.slack_notifications,
+        theme: settings.theme,
+      });
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const handleRetrain = async () => {
+    setIsRetraining(true);
+    try {
+      await retrainModel();
+    } catch (error) {
+      console.error('Failed to retrain model:', error);
+    } finally {
+      setIsRetraining(false);
+    }
+  };
+
+  if (isLoading || !settings) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -55,9 +112,9 @@ export default function Settings() {
               </Label>
               <Input
                 id="systemName"
-                value={settings.systemName}
+                value={settings.system_name}
                 onChange={(e) =>
-                  setSettings({ ...settings, systemName: e.target.value })
+                  setSettings({ ...settings, system_name: e.target.value })
                 }
                 className="bg-input border-border text-foreground"
                 placeholder="Enter system name"
@@ -71,9 +128,9 @@ export default function Settings() {
               <Input
                 id="refreshInterval"
                 type="number"
-                value={settings.refreshInterval}
+                value={settings.refresh_interval_seconds}
                 onChange={(e) =>
-                  setSettings({ ...settings, refreshInterval: e.target.value })
+                  setSettings({ ...settings, refresh_interval_seconds: parseInt(e.target.value) || 0 })
                 }
                 className="bg-input border-border text-foreground"
               />
@@ -86,9 +143,9 @@ export default function Settings() {
               <Input
                 id="alertThreshold"
                 type="number"
-                value={settings.alertThreshold}
+                value={settings.alert_threshold_mbps}
                 onChange={(e) =>
-                  setSettings({ ...settings, alertThreshold: e.target.value })
+                  setSettings({ ...settings, alert_threshold_mbps: parseInt(e.target.value) || 0 })
                 }
                 className="bg-input border-border text-foreground"
               />
@@ -133,9 +190,9 @@ export default function Settings() {
                 </p>
               </div>
               <Switch
-                checked={settings.anomalyDetection}
+                checked={settings.anomaly_detection}
                 onCheckedChange={(checked) =>
-                  setSettings({ ...settings, anomalyDetection: checked })
+                  setSettings({ ...settings, anomaly_detection: checked })
                 }
               />
             </div>
@@ -152,9 +209,9 @@ export default function Settings() {
                 </p>
               </div>
               <Switch
-                checked={settings.emailAlerts}
+                checked={settings.email_alerts}
                 onCheckedChange={(checked) =>
-                  setSettings({ ...settings, emailAlerts: checked })
+                  setSettings({ ...settings, email_alerts: checked })
                 }
               />
             </div>
@@ -171,9 +228,9 @@ export default function Settings() {
                 </p>
               </div>
               <Switch
-                checked={settings.slackNotifications}
+                checked={settings.slack_notifications}
                 onCheckedChange={(checked) =>
-                  setSettings({ ...settings, slackNotifications: checked })
+                  setSettings({ ...settings, slack_notifications: checked })
                 }
               />
             </div>
@@ -215,8 +272,10 @@ export default function Settings() {
             <Button
               variant="outline"
               className="w-full border-border text-foreground hover:bg-muted"
+              onClick={handleRetrain}
+              disabled={isRetraining}
             >
-              Retrain Model
+              {isRetraining ? 'Retraining...' : 'Retrain Model'}
             </Button>
           </CardContent>
         </Card>
@@ -226,10 +285,11 @@ export default function Settings() {
           <Button
             size="lg"
             onClick={handleSave}
+            disabled={isSaving}
             className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Save className="h-4 w-4" />
-            Save Settings
+            {isSaving ? 'Saving...' : 'Save Settings'}
           </Button>
         </div>
       </div>

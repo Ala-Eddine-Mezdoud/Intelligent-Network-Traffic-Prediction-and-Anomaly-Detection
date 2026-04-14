@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import {
   Table,
@@ -21,23 +21,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { anomalies } from '@/lib/mock-data';
+import { getAnomalies } from '@/lib/api';
+
+interface Anomaly {
+  id: string;
+  timestamp: string;
+  source_ip: string;
+  dest_ip: string;
+  threat_type: string;
+  severity: string;
+  status: string;
+}
 
 export default function AnomalyDetection() {
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredAnomalies = anomalies.filter((anomaly) => {
-    const matchesSearch =
-      anomaly.sourceIp.includes(searchTerm) ||
-      anomaly.destIp.includes(searchTerm) ||
-      anomaly.threatType.toLowerCase().includes(searchTerm.toLowerCase());
+  useEffect(() => {
+    async function fetchAnomalies() {
+      try {
+        const res = await getAnomalies(searchTerm, severityFilter);
+        setAnomalies(res.anomalies);
+      } catch (error) {
+        console.error('Failed to fetch anomalies:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-    const matchesSeverity =
-      severityFilter === 'all' || anomaly.severity === severityFilter;
+    fetchAnomalies();
+  }, [searchTerm, severityFilter]);
 
-    return matchesSearch && matchesSeverity;
-  });
+  const filteredAnomalies = anomalies;
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -57,6 +74,16 @@ export default function AnomalyDetection() {
       ? 'bg-red-500/20 text-red-300 border-red-500/30'
       : 'bg-green-500/20 text-green-300 border-green-500/30';
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -123,13 +150,13 @@ export default function AnomalyDetection() {
                         {anomaly.timestamp}
                       </TableCell>
                       <TableCell className="text-foreground font-mono text-xs md:text-sm px-2 md:px-4">
-                        {anomaly.sourceIp}
+                        {anomaly.source_ip}
                       </TableCell>
                       <TableCell className="text-foreground font-mono text-xs md:text-sm px-2 md:px-4">
-                        {anomaly.destIp}
+                        {anomaly.dest_ip}
                       </TableCell>
                       <TableCell className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                        {anomaly.threatType}
+                        {anomaly.threat_type}
                       </TableCell>
                       <TableCell className="text-xs md:text-sm px-2 md:px-4">
                         <Badge

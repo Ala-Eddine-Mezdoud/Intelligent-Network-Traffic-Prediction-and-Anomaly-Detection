@@ -1,13 +1,51 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
-import { alerts } from '@/lib/mock-data';
+import { getAlerts, getAlertStats } from '@/lib/api';
+
+interface Alert {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+  severity: string;
+}
+
+interface AlertStats {
+  total: number;
+  critical: number;
+  warnings: number;
+}
 
 export default function Alerts() {
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [stats, setStats] = useState<AlertStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [alertsRes, statsRes] = await Promise.all([
+          getAlerts(),
+          getAlertStats(),
+        ]);
+        setAlerts(alertsRes.alerts);
+        setStats(statsRes);
+      } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'High':
@@ -34,6 +72,16 @@ export default function Alerts() {
     }
   };
 
+  if (isLoading || !stats) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -49,18 +97,18 @@ export default function Alerts() {
         <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
           <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40 p-4">
             <div className="text-sm text-muted-foreground mb-1">Total Alerts</div>
-            <div className="text-3xl font-bold text-foreground">{alerts.length}</div>
+            <div className="text-3xl font-bold text-foreground">{stats.total}</div>
           </Card>
           <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40 p-4">
             <div className="text-sm text-muted-foreground mb-1">Critical</div>
             <div className="text-3xl font-bold text-red-500">
-              {alerts.filter((a) => a.severity === 'High').length}
+              {stats.critical}
             </div>
           </Card>
           <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40 p-4">
             <div className="text-sm text-muted-foreground mb-1">Warnings</div>
             <div className="text-3xl font-bold text-yellow-500">
-              {alerts.filter((a) => a.severity === 'Medium').length}
+              {stats.warnings}
             </div>
           </Card>
         </div>
