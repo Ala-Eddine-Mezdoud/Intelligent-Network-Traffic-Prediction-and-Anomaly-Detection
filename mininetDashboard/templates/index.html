@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDN Multi-Domain Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+<div class="shell">
+    <section class="graph-panel">
+        <header class="graph-header">
+            <div class="graph-header-row">
+                <div>
+                    <h1>Multi-Domain SDN Map</h1>
+                    <p>Data plane is grouped by domain; dashed red links show Ryu control sessions to SDN switches.</p>
+                </div>
+                <button id="btnToggleControl" type="button" class="ghost small">Control Links Only: Off</button>
+            </div>
+        </header>
+        <div class="canvas-wrap">
+            <svg id="topology"></svg>
+        </div>
+    </section>
+
+    <aside class="side-panel">
+        <h2>Control Plane</h2>
+
+        <h3>Topology Summary</h3>
+        <div id="summary" class="stat-card">Loading topology...</div>
+
+        <h3>Zones</h3>
+        <div id="zones" class="chip-grid"></div>
+
+        <h3>Node Types</h3>
+        <div id="legend" class="chip-grid"></div>
+
+        <h3>Selection</h3>
+        <div id="selected" class="stat-card">None</div>
+        <div id="info" class="stat-card">Click endpoint nodes (not switches).</div>
+        <div id="pathInfo" class="stat-card">Path: not calculated</div>
+
+        <div class="button-row">
+            <button id="btnPath" type="button">Visualize Path</button>
+            <button id="btnPing" type="button" class="secondary">Ping Path</button>
+        </div>
+        <button id="btnClear" type="button" class="ghost">Clear Highlight</button>
+
+        <h3>Controller Flows</h3>
+        <button id="btnFlows" type="button">Load Flows</button>
+        <pre id="flows">Ready. Generate traffic, then load flows.</pre>
+
+        <h3>Dataset Lab</h3>
+        <div id="labStatus" class="stat-card">Lab idle</div>
+        <div class="button-row">
+            <button id="btnLabStartCapture" type="button">Start Capture</button>
+            <button id="btnLabStopCapture" type="button" class="secondary">Stop Capture</button>
+        </div>
+        <div class="button-row">
+            <button id="btnLabStartTraffic" type="button">Run Traffic (90s)</button>
+            <button id="btnLabStopTraffic" type="button" class="ghost">Stop Traffic</button>
+        </div>
+        <div class="button-row">
+            <button id="btnLabRelay" type="button">Relay to Collector</button>
+            <button id="btnLabInfer" type="button" class="secondary">Run AI Inference</button>
+        </div>
+        <button id="btnLabExport" type="button">Export CICIDS-Like CSV</button>
+        <div id="labOutput" class="stat-card">Capture files and exported CSV path will appear here.</div>
+    </aside>
+</div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
