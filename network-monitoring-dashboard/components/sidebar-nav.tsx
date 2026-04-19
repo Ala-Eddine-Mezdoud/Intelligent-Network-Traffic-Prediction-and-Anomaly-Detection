@@ -7,8 +7,6 @@ import {
   TrendingUp,
   AlertTriangle,
   Bell,
-  Clock,
-  Settings,
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -33,16 +31,6 @@ const navItems = [
     href: '/alerts',
     label: 'Alerts',
     icon: Bell,
-  },
-  {
-    href: '/historical-data',
-    label: 'Historical Data',
-    icon: Clock,
-  },
-  {
-    href: '/settings',
-    label: 'Settings',
-    icon: Settings,
   },
 ];
 
