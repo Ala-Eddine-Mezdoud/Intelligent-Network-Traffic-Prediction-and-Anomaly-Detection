@@ -16,14 +16,14 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ComposedChart,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { MetricCard } from '@/components/metric-card';
 import {
   getCurrentMetrics,
-  getHistoricalTraffic,
-  getTrafficPrediction,
+  getPredictions,
   getProtocolDistribution,
   getSystemStatus,
 } from '@/lib/api';
@@ -37,14 +37,9 @@ interface MetricsData {
   alerts_today: number;
 }
 
-interface TrafficPoint {
-  time: string;
-  traffic: number;
-  predicted: number;
-}
-
 interface PredictionPoint {
   time: string;
+  historical: number | null;
   predicted: number;
   upper: number;
   lower: number;
@@ -58,13 +53,11 @@ interface ProtocolItem {
 interface SystemStatus {
   network_health_percent: number;
   anomaly_detection_percent: number;
-  system_uptime_percent: number;
   threat_level: string;
 }
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
-  const [trafficData, setTrafficData] = useState<TrafficPoint[]>([]);
   const [predictionData, setPredictionData] = useState<PredictionPoint[]>([]);
   const [protocolData, setProtocolData] = useState<ProtocolItem[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -73,15 +66,13 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [metricsRes, trafficRes, predictionRes, protocolRes, statusRes] = await Promise.all([
+        const [metricsRes, predictionRes, protocolRes, statusRes] = await Promise.all([
           getCurrentMetrics(),
-          getHistoricalTraffic(),
-          getTrafficPrediction(),
+          getPredictions(),
           getProtocolDistribution(),
           getSystemStatus(),
         ]);
         setMetrics(metricsRes);
-        setTrafficData(trafficRes.data);
         setPredictionData(predictionRes.data);
         setProtocolData(protocolRes.data);
         setSystemStatus(statusRes);
@@ -115,16 +106,12 @@ export default function Dashboard() {
           unit="Mbps"
           icon={<Zap className="h-5 w-5" />}
           trend="up"
-          trendValue="+12% from baseline"
-          description="Real-time network traffic"
         />
         <MetricCard
           title="Active Connections"
           value={metrics.active_connections}
           icon={<Activity className="h-5 w-5" />}
           trend="stable"
-          trendValue="Stable"
-          description="Current TCP/UDP connections"
         />
         <MetricCard
           title="Anomaly Score"
@@ -132,121 +119,82 @@ export default function Dashboard() {
           unit="%"
           icon={<AlertTriangle className="h-5 w-5" />}
           trend="down"
-          trendValue="-2.3% from last hour"
-          description="Network anomaly likelihood"
         />
         <MetricCard
           title="Alerts Today"
           value={metrics.alerts_today}
           icon={<TrendingUp className="h-5 w-5" />}
           trend="up"
-          trendValue="3 critical"
-          description="Total security alerts"
         />
       </div>
 
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-        {/* Traffic Chart */}
-        <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40">
-          <CardHeader>
-            <CardTitle>Network Traffic (Last 24 Hours)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trafficData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
-                <XAxis
-                  dataKey="time"
-                  stroke="#ffffff80"
-                  style={{ fontSize: '12px' }}
-                />
-                <YAxis stroke="#ffffff80" style={{ fontSize: '12px' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a1a2e',
-                    border: '1px solid #16213e',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: '#ffffff' }}
-                />
-                <Legend wrapperStyle={{ color: '#ffffff' }} />
-                <Line
-                  type="monotone"
-                  dataKey="traffic"
-                  stroke="#a78bfa"
-                  dot={false}
-                  strokeWidth={2}
-                  name="Actual Traffic"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#67e8f9"
-                  dot={false}
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  name="Predicted Traffic"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Prediction Chart */}
-        <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40">
-          <CardHeader>
-            <CardTitle>Predicted Traffic (Next 6 Hours)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={predictionData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
-                <XAxis
-                  dataKey="time"
-                  stroke="#ffffff80"
-                  style={{ fontSize: '12px' }}
-                />
-                <YAxis stroke="#ffffff80" style={{ fontSize: '12px' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a1a2e',
-                    border: '1px solid #16213e',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: '#ffffff' }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="upper"
-                  fill="#67e8f9"
-                  stroke="#67e8f9"
-                  fillOpacity={0.2}
-                  dot={false}
-                  name="Upper Bound"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="lower"
-                  fill="#67e8f9"
-                  stroke="#67e8f9"
-                  fillOpacity={0}
-                  dot={false}
-                  name="Lower Bound"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#a78bfa"
-                  strokeWidth={2}
-                  dot={false}
-                  name="Prediction"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Main Prediction Chart - Same as Traffic Prediction Page */}
+      <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40">
+        <CardHeader>
+          <CardTitle>Historical & Predicted Traffic (24 Hours)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={400}>
+            <ComposedChart data={predictionData}>
+              <defs>
+                <linearGradient id="colorUpper" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#67e8f9" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#67e8f9" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
+              <XAxis
+                dataKey="time"
+                stroke="#ffffff80"
+                style={{ fontSize: '12px' }}
+              />
+              <YAxis stroke="#ffffff80" style={{ fontSize: '12px' }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1a1a2e',
+                  border: '1px solid #16213e',
+                  borderRadius: '8px',
+                }}
+                labelStyle={{ color: '#ffffff' }}
+              />
+              <Legend wrapperStyle={{ color: '#ffffff' }} />
+              <Area
+                type="monotone"
+                dataKey="upper"
+                fill="url(#colorUpper)"
+                stroke="none"
+                name="Confidence Interval"
+              />
+              <Line
+                type="monotone"
+                dataKey="lower"
+                stroke="none"
+                fill="none"
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="historical"
+                stroke="#a78bfa"
+                dot={{ fill: '#a78bfa', r: 4 }}
+                activeDot={{ r: 6 }}
+                strokeWidth={2.5}
+                name="Historical Traffic"
+              />
+              <Line
+                type="monotone"
+                dataKey="predicted"
+                stroke="#67e8f9"
+                strokeDasharray="5 5"
+                dot={{ fill: '#67e8f9', r: 4 }}
+                activeDot={{ r: 6 }}
+                strokeWidth={2.5}
+                name="Predicted Traffic"
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
@@ -307,15 +255,6 @@ export default function Dashboard() {
               </div>
               <div className="h-2 rounded-full bg-muted">
                 <div className="h-full rounded-full bg-accent" style={{ width: `${systemStatus.anomaly_detection_percent}%` }} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">System Uptime</span>
-                <span className="text-sm font-semibold text-green-500">{systemStatus.system_uptime_percent}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-muted">
-                <div className="h-full rounded-full bg-green-500" style={{ width: `${systemStatus.system_uptime_percent}%` }} />
               </div>
             </div>
             <div className="space-y-2">
