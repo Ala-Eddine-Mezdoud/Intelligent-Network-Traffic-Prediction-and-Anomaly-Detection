@@ -47,7 +47,6 @@ export async function getSystemStatus() {
   return fetchApi<{
     network_health_percent: number;
     anomaly_detection_percent: number;
-    system_uptime_percent: number;
     threat_level: string;
   }>('/metrics/system/status');
 }
@@ -93,23 +92,6 @@ export async function getAnomalies(search?: string, severity?: string) {
   }>(`/anomalies?${params.toString()}`);
 }
 
-// Historical API
-export async function getHistoricalData(range: string = 'week') {
-  return fetchApi<{
-    weekly_data: Array<{ day: string; traffic: number; anomalies: number }>;
-    monthly_data: Array<{ week: string; traffic: number; peak: number }>;
-  }>(`/historical/traffic?range=${range}`);
-}
-
-export async function getHistoricalStats() {
-  return fetchApi<{
-    average_traffic_mbps: number;
-    peak_traffic_mbps: number;
-    total_anomalies: number;
-    avg_response_time_ms: number;
-  }>('/historical/stats');
-}
-
 // Predictions API
 export async function getPredictions() {
   return fetchApi<{
@@ -138,52 +120,4 @@ export async function getModelInfo() {
     last_updated: string;
     prediction_horizon: string;
   }>('/predictions/model/info');
-}
-
-// Settings API
-export async function getSettings() {
-  return fetchApi<{
-    system_name: string;
-    refresh_interval_seconds: number;
-    alert_threshold_mbps: number;
-    anomaly_detection: boolean;
-    email_alerts: boolean;
-    slack_notifications: boolean;
-    theme: string;
-  }>('/settings');
-}
-
-export async function updateSettings(settings: Partial<{
-  system_name: string;
-  refresh_interval_seconds: number;
-  alert_threshold_mbps: number;
-  anomaly_detection: boolean;
-  email_alerts: boolean;
-  slack_notifications: boolean;
-  theme: string;
-}>) {
-  return fetchApi<{
-    success: boolean;
-    settings: {
-      system_name: string;
-      refresh_interval_seconds: number;
-      alert_threshold_mbps: number;
-      anomaly_detection: boolean;
-      email_alerts: boolean;
-      slack_notifications: boolean;
-      theme: string;
-    };
-  }>('/settings', {
-    method: 'POST',
-    body: JSON.stringify(settings),
-  });
-}
-
-export async function retrainModel() {
-  return fetchApi<{
-    success: boolean;
-    message: string;
-  }>('/settings/model/retrain', {
-    method: 'POST',
-  });
 }
