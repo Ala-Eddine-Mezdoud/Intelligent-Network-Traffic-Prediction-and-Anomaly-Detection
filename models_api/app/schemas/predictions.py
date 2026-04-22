@@ -1,17 +1,19 @@
 """Prediction schemas."""
+from typing import List, Optional
+
 from pydantic import BaseModel
 
 
 class PredictionDataPoint(BaseModel):
     time: str
-    historical: float | None
+    historical: Optional[float]
     predicted: float
     upper: float
     lower: float
 
 
 class PredictionsResponse(BaseModel):
-    data: list[PredictionDataPoint]
+    data: List[PredictionDataPoint]
 
 
 class ModelMetricsResponse(BaseModel):

@@ -28,22 +28,35 @@ export default function Alerts() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchData() {
       try {
         const [alertsRes, statsRes] = await Promise.all([
           getAlerts(),
           getAlertStats(),
         ]);
+        if (!mounted) {
+          return;
+        }
         setAlerts(alertsRes.alerts);
         setStats(statsRes);
       } catch (error) {
         console.error('Failed to fetch alerts:', error);
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchData();
+
+    const timer = setInterval(fetchData, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, []);
 
   const getSeverityColor = (severity: string) => {

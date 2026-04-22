@@ -2,25 +2,28 @@ import csv
 import glob
 import json
 import os
+import random
 import shutil
 import statistics
 import subprocess
 import threading
 import time
+from pathlib import Path
 from datetime import datetime
 
 from .intelligence import intelligence_plane
 
 
-CAPTURE_DIR = "/home/mininet/mininetDashboard/captures"
-COLLECTOR_INBOX_DIR = "/home/mininet/mininetDashboard/captures/collector_inbox"
-INTELLIGENCE_OUT_DIR = "/home/mininet/mininetDashboard/captures/intelligence_out"
+BASE_DIR = Path(__file__).resolve().parents[1]
+CAPTURE_DIR = str(BASE_DIR / "captures")
+COLLECTOR_INBOX_DIR = str(BASE_DIR / "captures" / "collector_inbox")
+INTELLIGENCE_OUT_DIR = str(BASE_DIR / "captures" / "intelligence_out")
 ATTACKER_IP_PREFIXES = {"192.168.10.31", "192.168.20.21"}
 
 
 class LabPipeline:
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._capture_id = None
         self._capture_processes = []
         self._capture_files = []
@@ -31,6 +34,41 @@ class LabPipeline:
         self._last_inference = None
         self._traffic_thread = None
         self._traffic_stop = threading.Event()
+        self._realtime_thread = None
+        self._realtime_stop = threading.Event()
+        self._realtime_interval_seconds = 30
+        self._last_realtime_run = None
+        self._last_realtime_error = None
+        self._realtime_settings = {
+            "attack_interval_min_seconds": 60,
+            "attack_interval_max_seconds": 300,
+            "attack_intensity": 1.0,
+            "protocol_mix_weights": {
+                "icmp": 55,
+                "http": 75,
+                "dns": 65,
+                "dhcp": 40,
+                "quic_udp": 60,
+                "ftp": 35,
+                "ssh": 45,
+                "igmp": 25,
+            },
+        }
+        self._next_attack_epoch = None
+        self._next_attack_profile = None
+        self._last_attack = None
+        self._attack_profiles = [
+            "PortScan",
+            "DDoS",
+            "DoS Hulk",
+            "DoS slowloris",
+            "FTP-Patator",
+            "SSH-Patator",
+            "Web Attack - SQL Injection",
+            "Web Attack - XSS",
+            "Bot",
+            "Infiltration",
+        ]
 
     def status(self):
         with self._lock:
@@ -44,7 +82,138 @@ class LabPipeline:
                 "last_export_csv": self._last_export_csv,
                 "last_relay": self._last_relay,
                 "last_inference": self._last_inference,
+                "realtime_running": bool(self._realtime_thread and self._realtime_thread.is_alive()),
+                "realtime_interval_seconds": self._realtime_interval_seconds,
+                "last_realtime_run": self._last_realtime_run,
+                "last_realtime_error": self._last_realtime_error,
+                "realtime_settings": self.get_realtime_settings(),
+                "next_attack_profile": self._next_attack_profile,
+                "next_attack_in_seconds": self._seconds_to_next_attack(),
+                "last_attack": self._last_attack,
             }
+
+    def realtime_status(self):
+        with self._lock:
+            return {
+                "running": bool(self._realtime_thread and self._realtime_thread.is_alive()),
+                "interval_seconds": self._realtime_interval_seconds,
+                "last_realtime_run": self._last_realtime_run,
+                "last_realtime_error": self._last_realtime_error,
+                "last_inference": self._last_inference,
+                "realtime_settings": self.get_realtime_settings(),
+                "next_attack_profile": self._next_attack_profile,
+                "next_attack_in_seconds": self._seconds_to_next_attack(),
+                "last_attack": self._last_attack,
+            }
+
+    def get_realtime_settings(self):
+        with self._lock:
+            mix = dict(self._realtime_settings.get("protocol_mix_weights", {}))
+            return {
+                "attack_interval_min_seconds": int(self._realtime_settings.get("attack_interval_min_seconds", 60)),
+                "attack_interval_max_seconds": int(self._realtime_settings.get("attack_interval_max_seconds", 300)),
+                "attack_intensity": float(self._realtime_settings.get("attack_intensity", 1.0)),
+                "protocol_mix_weights": mix,
+            }
+
+    def update_realtime_settings(self, payload):
+        payload = payload or {}
+        current = self.get_realtime_settings()
+
+        min_s = int(payload.get("attack_interval_min_seconds", current["attack_interval_min_seconds"]))
+        max_s = int(payload.get("attack_interval_max_seconds", current["attack_interval_max_seconds"]))
+        if min_s < 10 or max_s < 10:
+            raise RuntimeError("Attack interval min/max must be at least 10 seconds")
+        if min_s > max_s:
+            raise RuntimeError("attack_interval_min_seconds must be <= attack_interval_max_seconds")
+
+        intensity = float(payload.get("attack_intensity", current["attack_intensity"]))
+        if intensity < 0.2 or intensity > 5.0:
+            raise RuntimeError("attack_intensity must be between 0.2 and 5.0")
+
+        incoming_mix = payload.get("protocol_mix_weights") or {}
+        next_mix = dict(current["protocol_mix_weights"])
+        for key, value in incoming_mix.items():
+            if key not in next_mix:
+                continue
+            ivalue = int(value)
+            if ivalue < 0 or ivalue > 100:
+                raise RuntimeError(f"protocol_mix_weights.{key} must be in range 0..100")
+            next_mix[key] = ivalue
+
+        with self._lock:
+            self._realtime_settings["attack_interval_min_seconds"] = min_s
+            self._realtime_settings["attack_interval_max_seconds"] = max_s
+            self._realtime_settings["attack_intensity"] = intensity
+            self._realtime_settings["protocol_mix_weights"] = next_mix
+
+            if self._realtime_thread and self._realtime_thread.is_alive():
+                self._schedule_next_attack()
+
+        return self.get_realtime_settings()
+
+    def _seconds_to_next_attack(self):
+        if self._next_attack_epoch is None:
+            return None
+        return max(0, int(self._next_attack_epoch - time.time()))
+
+    def _schedule_next_attack(self, min_seconds=None, max_seconds=None):
+        settings = self.get_realtime_settings()
+        min_seconds = int(min_seconds or settings["attack_interval_min_seconds"])
+        max_seconds = int(max_seconds or settings["attack_interval_max_seconds"])
+        self._next_attack_epoch = time.time() + random.randint(min_seconds, max_seconds)
+        self._next_attack_profile = random.choice(self._attack_profiles)
+
+    def _ensure_attack_schedule(self):
+        if self._next_attack_epoch is None or self._next_attack_profile is None:
+            self._schedule_next_attack()
+
+    def start_realtime(self, net, interval_seconds=30):
+        interval_seconds = int(interval_seconds)
+        if interval_seconds < 10:
+            raise RuntimeError("interval_seconds must be at least 10")
+
+        if not self._command_exists("tcpdump"):
+            raise RuntimeError("tcpdump not found. Install tcpdump before starting realtime mode")
+        if not self._command_exists("tshark"):
+            raise RuntimeError("tshark not found. Install tshark before starting realtime mode")
+
+        with self._lock:
+            if self._realtime_thread and self._realtime_thread.is_alive():
+                raise RuntimeError("Realtime loop already running")
+            if self._capture_processes:
+                raise RuntimeError("Cannot start realtime loop while manual capture is running")
+
+            self._realtime_interval_seconds = interval_seconds
+            self._last_realtime_error = None
+            self._schedule_next_attack()
+            self._realtime_stop.clear()
+            thread = threading.Thread(
+                target=self._realtime_worker,
+                args=(net, interval_seconds),
+                daemon=True,
+            )
+            self._realtime_thread = thread
+            thread.start()
+
+        return {
+            "started": True,
+            "interval_seconds": interval_seconds,
+        }
+
+    def stop_realtime(self):
+        self._realtime_stop.set()
+
+        with self._lock:
+            thread = self._realtime_thread
+
+        if thread and thread.is_alive():
+            thread.join(timeout=5)
+
+        if self.status().get("capture_running"):
+            self.stop_capture()
+
+        return {"stopped": True}
 
     def start_capture(self, net, label="session"):
         if not self._command_exists("tcpdump"):
@@ -137,6 +306,7 @@ class LabPipeline:
                 daemon=True,
             )
             self._traffic_thread = thread
+            self._schedule_next_attack()
             thread.start()
 
         return {"started": True, "duration_seconds": int(duration_seconds)}
@@ -253,6 +423,44 @@ class LabPipeline:
 
         return inference_report
 
+    def _realtime_worker(self, net, interval_seconds):
+        while not self._realtime_stop.is_set():
+            capture_id = None
+            cycle_start = time.time()
+
+            try:
+                cap = self.start_capture(net, label="realtime")
+                capture_id = cap["capture_id"]
+
+                while (time.time() - cycle_start) < interval_seconds and not self._realtime_stop.is_set():
+                    self._run_realtime_traffic_cycle(net)
+                    time.sleep(2)
+
+                self.stop_capture()
+                self.relay_capture_to_collector(capture_id)
+                self.collector_extract_and_infer(capture_id)
+
+                with self._lock:
+                    self._last_realtime_run = datetime.utcnow().isoformat() + "Z"
+                    self._last_realtime_error = None
+
+            except Exception as exc:
+                if self.status().get("capture_running"):
+                    try:
+                        self.stop_capture()
+                    except Exception:
+                        pass
+
+                with self._lock:
+                    self._last_realtime_run = datetime.utcnow().isoformat() + "Z"
+                    self._last_realtime_error = str(exc)
+
+                time.sleep(2)
+
+    def _run_realtime_traffic_cycle(self, net):
+        self._run_protocol_mix_cycle(net)
+        self._maybe_run_scheduled_attack(net)
+
     def _capture_interfaces(self, net):
         # Capture points are distribution/access switches instead of edge hosts.
         switch_names = ["isp_core", "ent1_sw", "ent2_sw", "home1_sw", "home2_sw", "dc_sw"]
@@ -279,44 +487,121 @@ class LabPipeline:
     def _traffic_worker(self, net, duration_seconds):
         end_ts = time.time() + max(10, duration_seconds)
 
-        benign_patterns = [
-            ("e1_pc1", "dc_web"),
-            ("e1_pc2", "e2_crm"),
-            ("e2_pc1", "dc_vpn"),
-            ("h1_pc", "dc_pub_dns"),
-            ("h2_pc", "dc_web"),
-            ("h2_nas", "dc_monitor"),
-        ]
+        try:
+            while time.time() < end_ts and not self._traffic_stop.is_set():
+                self._run_protocol_mix_cycle(net)
+                self._maybe_run_scheduled_attack(net)
+                time.sleep(1.0)
+        finally:
+            net.get("dc_web").cmd("pkill -f 'http.server 8080' >/dev/null 2>&1")
 
-        suspicious_patterns = [
-            ("h1_iot", "dc_web"),
-            ("h2_cam", "dc_web"),
-        ]
+    def _run_protocol_mix_cycle(self, net):
+        mix = self.get_realtime_settings().get("protocol_mix_weights", {})
 
-        # Lightweight HTTP service to create application-layer traffic features.
+        # Lightweight HTTP service to generate web traffic features.
         web_host = net.get("dc_web")
         web_host.cmd("pkill -f 'http.server 8080' >/dev/null 2>&1")
         web_host.cmd("nohup python3 -m http.server 8080 >/tmp/dc_web_http.log 2>&1 &")
 
-        idx = 0
-        try:
-            while time.time() < end_ts and not self._traffic_stop.is_set():
-                src_name, dst_name = benign_patterns[idx % len(benign_patterns)]
-                self._run_ping(net, src_name, dst_name, count=3, interval=0.2)
-                self._run_http_get(net, src_name, "dc_web", port=8080)
+        if random.randint(1, 100) <= int(mix.get("icmp", 50)):
+            self._run_ping(net, "e1_pc1", "dc_web", count=2, interval=0.2)
 
-                if idx % 2 == 0:
-                    self._run_udp_burst(net, "h2_nas", "dc_monitor", packets=30)
+        if random.randint(1, 100) <= int(mix.get("http", 70)):
+            self._run_http_get(net, "e1_pc1", "dc_web", port=8080)
+            self._run_http_get(net, "h2_pc", "dc_web", port=8080)
 
-                if idx % 3 == 0:
-                    atk_src, atk_dst = suspicious_patterns[(idx // 3) % len(suspicious_patterns)]
-                    # Bursty ICMP profile used as a simple anomalous pattern.
-                    self._run_ping_flood_like(net, atk_src, atk_dst, bursts=20)
+        if random.randint(1, 100) <= int(mix.get("dns", 60)):
+            self._run_dns_like(net, "e1_pc2", "dc_pub_dns")
+            self._run_dns_like(net, "h1_pc", "dc_pub_dns")
 
-                idx += 1
-                time.sleep(0.3)
-        finally:
-            web_host.cmd("pkill -f 'http.server 8080' >/dev/null 2>&1")
+        if random.randint(1, 100) <= int(mix.get("dhcp", 35)):
+            self._run_udp_burst_port(net, "e1_pc1", "e1_dhcp", port=67, packets=8, payload_prefix="dhcp_discover")
+            self._run_udp_burst_port(net, "e1_dhcp", "e1_pc1", port=68, packets=8, payload_prefix="dhcp_offer")
+
+        if random.randint(1, 100) <= int(mix.get("quic_udp", 55)):
+            self._run_udp_burst_port(net, "h2_nas", "dc_web", port=443, packets=20, payload_prefix="quic")
+
+        if random.randint(1, 100) <= int(mix.get("ftp", 30)):
+            self._run_tcp_connect_burst(net, "e2_pc2", "dc_monitor", port=21, attempts=6)
+
+        if random.randint(1, 100) <= int(mix.get("ssh", 40)):
+            self._run_tcp_connect_burst(net, "e2_pc1", "dc_vpn", port=22, attempts=6)
+
+        if random.randint(1, 100) <= int(mix.get("igmp", 20)):
+            self._run_udp_burst_port(net, "h1_tv", "224.0.0.22", port=1900, packets=6, payload_prefix="igmp_like")
+
+    def _maybe_run_scheduled_attack(self, net):
+        self._ensure_attack_schedule()
+        if time.time() < self._next_attack_epoch:
+            return
+
+        profile = self._next_attack_profile
+        self._execute_attack_profile(net, profile)
+        self._last_attack = {
+            "name": profile,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        self._schedule_next_attack()
+
+    def _execute_attack_profile(self, net, profile):
+        intensity = float(self.get_realtime_settings().get("attack_intensity", 1.0))
+        burst = lambda n: max(1, int(n * intensity))
+
+        if profile == "PortScan":
+            self._run_port_scan(net, "h1_iot", "dc_web", ports=[21, 22, 23, 53, 80, 443, 8080, 3306, 3389])
+            return
+
+        if profile == "DDoS":
+            self._run_udp_burst_port(net, "h1_iot", "dc_web", port=443, packets=burst(120), payload_prefix="ddos_quic")
+            self._run_udp_burst_port(net, "h2_cam", "dc_web", port=443, packets=burst(120), payload_prefix="ddos_quic")
+            return
+
+        if profile == "DoS Hulk":
+            self._run_http_flood(net, "h1_iot", "dc_web", port=8080, requests=burst(80))
+            return
+
+        if profile == "DoS slowloris":
+            self._run_slow_http_like(net, "h2_cam", "dc_web", port=8080, sockets=burst(24))
+            return
+
+        if profile == "FTP-Patator":
+            self._run_tcp_connect_burst(net, "h1_iot", "dc_monitor", port=21, attempts=burst(40))
+            return
+
+        if profile == "SSH-Patator":
+            self._run_tcp_connect_burst(net, "h2_cam", "dc_vpn", port=22, attempts=burst(40))
+            return
+
+        if profile == "Web Attack - SQL Injection":
+            self._run_http_payload_attack(
+                net,
+                "h1_iot",
+                "dc_web",
+                payload="id=1%20OR%201=1--",
+                port=8080,
+                requests=burst(30),
+            )
+            return
+
+        if profile == "Web Attack - XSS":
+            self._run_http_payload_attack(
+                net,
+                "h2_cam",
+                "dc_web",
+                payload="q=%3Cscript%3Ealert(1)%3C/script%3E",
+                port=8080,
+                requests=burst(30),
+            )
+            return
+
+        if profile == "Bot":
+            self._run_udp_burst_port(net, "h1_iot", "dc_monitor", port=6667, packets=burst(80), payload_prefix="bot_c2")
+            return
+
+        if profile == "Infiltration":
+            self._run_tcp_connect_burst(net, "h2_cam", "dc_vpn", port=22, attempts=burst(18))
+            self._run_udp_burst_port(net, "h2_cam", "dc_pub_dns", port=53, packets=burst(90), payload_prefix="dns_tunnel")
+            return
 
     @staticmethod
     def _run_ping(net, src_name, dst_name, count=3, interval=0.2):
@@ -345,6 +630,36 @@ class LabPipeline:
             src.cmd(f"wget -T 2 -q -O /dev/null http://{dst_ip}:{port}/ >/dev/null 2>&1")
 
     @staticmethod
+    def _run_http_flood(net, src_name, dst_name, port=8080, requests=60):
+        src = net.get(src_name)
+        dst_ip = net.get(dst_name).IP()
+        src.cmd(
+            "bash -lc '"
+            + f"for i in $(seq 1 {requests}); do curl -m 1 -s http://{dst_ip}:{port}/ >/dev/null 2>&1 || true; done"
+            + "'"
+        )
+
+    @staticmethod
+    def _run_http_payload_attack(net, src_name, dst_name, payload, port=8080, requests=20):
+        src = net.get(src_name)
+        dst_ip = net.get(dst_name).IP()
+        src.cmd(
+            "bash -lc '"
+            + f"for i in $(seq 1 {requests}); do curl -m 1 -s \"http://{dst_ip}:{port}/?{payload}\" >/dev/null 2>&1 || true; done"
+            + "'"
+        )
+
+    @staticmethod
+    def _run_slow_http_like(net, src_name, dst_name, port=8080, sockets=20):
+        src = net.get(src_name)
+        dst_ip = net.get(dst_name).IP()
+        src.cmd(
+            "bash -lc '"
+            + f"for i in $(seq 1 {sockets}); do (printf \"GET / HTTP/1.1\\r\\nHost: x\\r\\n\"; sleep 0.4) | nc -w2 {dst_ip} {port} >/dev/null 2>&1; done"
+            + "'"
+        )
+
+    @staticmethod
     def _run_udp_burst(net, src_name, dst_name, packets=30):
         src = net.get(src_name)
         dst_ip = net.get(dst_name).IP()
@@ -357,6 +672,71 @@ class LabPipeline:
             + f"for i in $(seq 1 {packets}); do echo udp_sample_$i | nc -u -w1 {dst_ip} 9999 >/dev/null 2>&1; done"
             + "'"
         )
+
+    @staticmethod
+    def _run_udp_burst_port(net, src_name, dst_name_or_ip, port=9999, packets=20, payload_prefix="udp"):
+        src = net.get(src_name)
+        if src.cmd("command -v nc >/dev/null 2>&1; echo $?\n").strip() != "0":
+            return
+
+        if dst_name_or_ip.count(".") == 3:
+            dst_ip = dst_name_or_ip
+        else:
+            dst_ip = net.get(dst_name_or_ip).IP()
+
+        src.cmd(
+            "bash -lc '"
+            + f"for i in $(seq 1 {packets}); do echo {payload_prefix}_$i | nc -u -w1 {dst_ip} {port} >/dev/null 2>&1; done"
+            + "'"
+        )
+
+    @staticmethod
+    def _run_tcp_connect_burst(net, src_name, dst_name_or_ip, port=22, attempts=10):
+        src = net.get(src_name)
+        if src.cmd("command -v nc >/dev/null 2>&1; echo $?\n").strip() != "0":
+            return
+
+        if dst_name_or_ip.count(".") == 3:
+            dst_ip = dst_name_or_ip
+        else:
+            dst_ip = net.get(dst_name_or_ip).IP()
+
+        src.cmd(
+            "bash -lc '"
+            + f"for i in $(seq 1 {attempts}); do nc -z -w1 {dst_ip} {port} >/dev/null 2>&1 || true; done"
+            + "'"
+        )
+
+    @staticmethod
+    def _run_port_scan(net, src_name, dst_name, ports):
+        src = net.get(src_name)
+        dst_ip = net.get(dst_name).IP()
+
+        if src.cmd("command -v nc >/dev/null 2>&1; echo $?\n").strip() != "0":
+            return
+
+        port_list = " ".join(str(port) for port in ports)
+        src.cmd(
+            "bash -lc '"
+            + f"for p in {port_list}; do nc -z -w1 {dst_ip} $p >/dev/null 2>&1 || true; done"
+            + "'"
+        )
+
+    @staticmethod
+    def _run_dns_like(net, src_name, dst_name):
+        src = net.get(src_name)
+        dst_ip = net.get(dst_name).IP()
+
+        if src.cmd("command -v dig >/dev/null 2>&1; echo $?\n").strip() == "0":
+            src.cmd(f"dig @{dst_ip} example.com +short >/dev/null 2>&1")
+            return
+
+        if src.cmd("command -v nslookup >/dev/null 2>&1; echo $?\n").strip() == "0":
+            src.cmd(f"nslookup example.com {dst_ip} >/dev/null 2>&1")
+            return
+
+        if src.cmd("command -v nc >/dev/null 2>&1; echo $?\n").strip() == "0":
+            src.cmd(f"echo dns_query | nc -u -w1 {dst_ip} 53 >/dev/null 2>&1")
 
     @staticmethod
     def _command_exists(command):

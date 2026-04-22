@@ -1,5 +1,6 @@
 """Metrics API routes."""
 import random
+from typing import List
 
 from fastapi import APIRouter
 
@@ -45,7 +46,7 @@ def get_current_metrics() -> CurrentMetricsResponse:
     )
 
 
-def get_historical_traffic_data() -> list[TrafficDataPoint]:
+def get_historical_traffic_data() -> List[TrafficDataPoint]:
     return [
         TrafficDataPoint(time="00:00", traffic=45, predicted=48),
         TrafficDataPoint(time="01:00", traffic=52, predicted=55),
@@ -74,7 +75,7 @@ def get_historical_traffic_data() -> list[TrafficDataPoint]:
     ]
 
 
-def get_prediction_data() -> list[PredictionDataPoint]:
+def get_prediction_data() -> List[PredictionDataPoint]:
     return [
         PredictionDataPoint(time="00:00", predicted=45, upper=52, lower=38),
         PredictionDataPoint(time="01:00", predicted=55, upper=63, lower=47),
@@ -85,7 +86,7 @@ def get_prediction_data() -> list[PredictionDataPoint]:
     ]
 
 
-def get_protocol_distribution() -> list[ProtocolDistributionItem]:
+def get_protocol_distribution() -> List[ProtocolDistributionItem]:
     return [
         ProtocolDistributionItem(name="HTTPS", value=45),
         ProtocolDistributionItem(name="HTTP", value=20),

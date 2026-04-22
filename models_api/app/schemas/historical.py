@@ -1,4 +1,6 @@
 """Historical data schemas."""
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -15,8 +17,8 @@ class MonthlyDataPoint(BaseModel):
 
 
 class HistoricalTrafficResponse(BaseModel):
-    weekly_data: list[WeeklyDataPoint]
-    monthly_data: list[MonthlyDataPoint]
+    weekly_data: List[WeeklyDataPoint]
+    monthly_data: List[MonthlyDataPoint]
 
 
 class HistoricalStatsResponse(BaseModel):

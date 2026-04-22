@@ -56,6 +56,53 @@
 
         <h3>Dataset Lab</h3>
         <div id="labStatus" class="stat-card">Lab idle</div>
+        <h3>Realtime Settings</h3>
+        <div class="settings-grid">
+            <label for="rtAttackMin">Attack Min (s)</label>
+            <input id="rtAttackMin" type="number" min="10" step="5" value="60">
+
+            <label for="rtAttackMax">Attack Max (s)</label>
+            <input id="rtAttackMax" type="number" min="10" step="5" value="300">
+
+            <label for="rtAttackIntensity">Attack Intensity</label>
+            <input id="rtAttackIntensity" type="number" min="0.2" max="5" step="0.1" value="1.0">
+
+            <label for="rtInterval">Realtime Interval (s)</label>
+            <input id="rtInterval" type="number" min="10" step="5" value="30">
+        </div>
+        <div class="settings-grid">
+            <label for="rtWIcmp">ICMP</label>
+            <input id="rtWIcmp" type="number" min="0" max="100" step="1" value="55">
+
+            <label for="rtWHttp">HTTP</label>
+            <input id="rtWHttp" type="number" min="0" max="100" step="1" value="75">
+
+            <label for="rtWDns">DNS</label>
+            <input id="rtWDns" type="number" min="0" max="100" step="1" value="65">
+
+            <label for="rtWDhcp">DHCP</label>
+            <input id="rtWDhcp" type="number" min="0" max="100" step="1" value="40">
+
+            <label for="rtWQuic">QUIC/UDP</label>
+            <input id="rtWQuic" type="number" min="0" max="100" step="1" value="60">
+
+            <label for="rtWFtp">FTP</label>
+            <input id="rtWFtp" type="number" min="0" max="100" step="1" value="35">
+
+            <label for="rtWSsh">SSH</label>
+            <input id="rtWSsh" type="number" min="0" max="100" step="1" value="45">
+
+            <label for="rtWIgmp">IGMP</label>
+            <input id="rtWIgmp" type="number" min="0" max="100" step="1" value="25">
+        </div>
+        <div class="button-row">
+            <button id="btnRtLoadSettings" type="button" class="ghost">Load Settings</button>
+            <button id="btnRtSaveSettings" type="button">Save Settings</button>
+        </div>
+        <div class="button-row">
+            <button id="btnPipelineStart" type="button">Start Realtime (30s)</button>
+            <button id="btnPipelineStop" type="button" class="secondary">Stop Realtime</button>
+        </div>
         <div class="button-row">
             <button id="btnLabStartCapture" type="button">Start Capture</button>
             <button id="btnLabStopCapture" type="button" class="secondary">Stop Capture</button>
