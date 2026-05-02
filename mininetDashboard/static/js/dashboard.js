@@ -731,8 +731,6 @@ document.getElementById("btnLabStopTraffic").addEventListener("click", () => {
     });
 });
 
-});
-
 document.getElementById("btnLabRelay").addEventListener("click", () => {
     relayToCollector().catch((err) => {
         document.getElementById("labOutput").innerText = `Relay error: ${err}`;
