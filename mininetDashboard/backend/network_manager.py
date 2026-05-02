@@ -3,7 +3,7 @@ import threading
 from functools import partial
 
 from mininet.net import Mininet
-from mininet.node import OVSSwitch, RemoteController
+from mininet.node import Host, OVSSwitch, RemoteController
 
 from .config import MININET_CONTROLLER_IP
 from .topology import RealWorldTopo, configure_network
@@ -38,6 +38,7 @@ class NetworkManager:
         net = Mininet(
             topo=topo,
             controller=lambda name: RemoteController(name, ip=MININET_CONTROLLER_IP),
+            host=partial(Host, privateDirs=["/etc"]),
             # Ryu app simple_switch_13 requires OpenFlow 1.3 datapaths.
             switch=partial(OVSSwitch, protocols="OpenFlow13"),
         )

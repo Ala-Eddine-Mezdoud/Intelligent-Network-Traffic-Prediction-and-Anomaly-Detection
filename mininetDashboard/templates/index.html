@@ -115,8 +115,14 @@
             <button id="btnLabRelay" type="button">Relay to Collector</button>
             <button id="btnLabInfer" type="button" class="secondary">Run AI Inference</button>
         </div>
-        <button id="btnLabExport" type="button">Export CICIDS-Like CSV</button>
-        <div id="labOutput" class="stat-card">Capture files and exported CSV path will appear here.</div>
+        
+        <h3>Dataset Generation</h3>
+        <div class="stat-card" style="background-color: var(--card-bg); border: 1px solid var(--primary-color);">
+            <p style="margin-bottom: 10px;">Offline GNN Dataset Generation and CSV training exports have been moved to the new Next.js dashboard.</p>
+            <p><a href="http://localhost:3000" style="color: var(--primary-color); font-weight: bold; text-decoration: none;">Open Data Generator (Port 3000) &rarr;</a></p>
+        </div>
+
+        <div id="labOutput" class="stat-card" style="margin-top: 15px;">Pipeline logs will appear here.</div>
     </aside>
 </div>
 

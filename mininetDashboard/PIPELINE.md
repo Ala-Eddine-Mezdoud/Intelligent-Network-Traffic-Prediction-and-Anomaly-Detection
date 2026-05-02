@@ -52,6 +52,7 @@ This simulates real-world telemetry shipping from capture agents to a collector 
 - Extracted flow rows are passed to the AI inference stage.
 - Current implementation outputs risk score, severity, suspicious flow count, and reasons.
 - Inference report is saved as JSON.
+- Planned extension: topology-aware graph prediction for congestion, hotspot detection, and operational anomaly forecasting.
 
 ### 3.6 Dashboard and Decision Layer
 

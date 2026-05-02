@@ -25,18 +25,4 @@ def create_app():
 
     manager.start_async()
 
-    def boot_realtime_loop():
-        while True:
-            net = manager.net
-            if net is not None:
-                try:
-                    lab_pipeline.start_realtime(net, interval_seconds=30)
-                    return
-                except Exception:
-                    # Keep retrying so realtime mode eventually starts once dependencies are ready.
-                    pass
-            time.sleep(1)
-
-    threading.Thread(target=boot_realtime_loop, daemon=True).start()
-
     return app
