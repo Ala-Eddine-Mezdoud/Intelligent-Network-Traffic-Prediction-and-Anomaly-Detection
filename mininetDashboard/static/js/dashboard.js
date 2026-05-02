@@ -49,19 +49,19 @@ function applyRealtimeSettingsToForm(settings) {
         return;
     }
 
-    setFieldValue("rtAttackMin", settings.attack_interval_min_seconds ?? 60);
-    setFieldValue("rtAttackMax", settings.attack_interval_max_seconds ?? 300);
-    setFieldValue("rtAttackIntensity", settings.attack_intensity ?? 1.0);
+    setFieldValue("rtAttackMin", settings.attack_interval_min_seconds || 60);
+    setFieldValue("rtAttackMax", settings.attack_interval_max_seconds || 300);
+    setFieldValue("rtAttackIntensity", settings.attack_intensity || 1.0);
 
     const mix = settings.protocol_mix_weights || {};
-    setFieldValue("rtWIcmp", mix.icmp ?? 55);
-    setFieldValue("rtWHttp", mix.http ?? 75);
-    setFieldValue("rtWDns", mix.dns ?? 65);
-    setFieldValue("rtWDhcp", mix.dhcp ?? 40);
-    setFieldValue("rtWQuic", mix.quic_udp ?? 60);
-    setFieldValue("rtWFtp", mix.ftp ?? 35);
-    setFieldValue("rtWSsh", mix.ssh ?? 45);
-    setFieldValue("rtWIgmp", mix.igmp ?? 25);
+    setFieldValue("rtWIcmp", mix.icmp || 55);
+    setFieldValue("rtWHttp", mix.http || 75);
+    setFieldValue("rtWDns", mix.dns || 65);
+    setFieldValue("rtWDhcp", mix.dhcp || 40);
+    setFieldValue("rtWQuic", mix.quic_udp || 60);
+    setFieldValue("rtWFtp", mix.ftp || 35);
+    setFieldValue("rtWSsh", mix.ssh || 45);
+    setFieldValue("rtWIgmp", mix.igmp || 25);
 }
 
 const TYPE_COLORS = {
@@ -612,25 +612,6 @@ async function stopTraffic() {
     await refreshLabStatus();
 }
 
-async function exportLabFeatures() {
-    // Export uses the most recent capture id when available.
-    const response = await fetch("/api/lab/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ capture_id: currentCaptureId }),
-    });
-    const payload = await response.json();
-
-    if (payload.error) {
-        document.getElementById("labOutput").innerText = `Export failed: ${payload.error}`;
-        return;
-    }
-
-    document.getElementById("labOutput").innerText =
-        `CSV exported\nCapture: ${payload.capture_id}\nFlows: ${payload.flow_count}\nPath: ${payload.csv_path}`;
-
-    await refreshLabStatus();
-}
 
 async function relayToCollector() {
     const response = await fetch("/api/lab/relay", {
@@ -750,10 +731,6 @@ document.getElementById("btnLabStopTraffic").addEventListener("click", () => {
     });
 });
 
-document.getElementById("btnLabExport").addEventListener("click", () => {
-    exportLabFeatures().catch((err) => {
-        document.getElementById("labOutput").innerText = `Export error: ${err}`;
-    });
 });
 
 document.getElementById("btnLabRelay").addEventListener("click", () => {

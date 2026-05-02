@@ -27,6 +27,7 @@ The design goal is to bridge offline ML training and near-real-time inference by
 - `backend/services.py`: Stateless helpers for topology serialization, path computation, ping, and controller flow reads
 - `backend/routes.py`: HTTP API layer; validates input and delegates to service modules
 - `backend/lab.py`: Dataset lab pipeline (capture, traffic generation, feature extraction/export)
+- `backend/intelligence.py`: Baseline IDS and forecasting logic; future home for graph-based prediction adapters
 
 ## 3. Topology Model
 
@@ -77,6 +78,18 @@ Spoke routers use default route to `isp_r1`. `isp_r1` has explicit routes to eac
    - Starts switches/controllers
    - Applies IPs/routes/resolver config via `configure_network()`
 4. APIs become available immediately; topology/lab endpoints return startup errors until Mininet is ready.
+
+## 6. Planned Predictive Layer
+
+The current backend already supports reactive anomaly detection and traffic forecasting. The next enhancement is a graph-aware predictive layer that uses topology and flow relationships to forecast congestion and operational anomalies before they become visible to the operator.
+
+Recommended flow:
+
+1. Capture traffic and extract flow/window features.
+2. Build a topology-aware graph snapshot from nodes, links, and active flows.
+3. Run a GNN or graph-temporal model to predict congestion and anomaly risk.
+4. Feed the output to a decision engine for reroute, throttle, or priority actions.
+5. Expose the prediction and action status through the same dashboard APIs.
 
 ## 5. API Endpoints
 

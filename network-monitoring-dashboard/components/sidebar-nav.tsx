@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Bell,
   Activity,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,11 @@ const navItems = [
     href: '/alerts',
     label: 'Alerts',
     icon: Bell,
+  },
+  {
+    href: '/data-generation',
+    label: 'Data Generation',
+    icon: Database,
   },
 ];
 
