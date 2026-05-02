@@ -4,6 +4,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+from typing import List, Tuple
 from fastapi import APIRouter
 
 from app.schemas.predictions import (
@@ -31,7 +32,7 @@ def load_model():
     return model
 
 
-def generate_mock_historical_data(n_hours: int = 24) -> list[float]:
+def generate_mock_historical_data(n_hours: int = 24) -> List[float]:
     """Generate mock historical traffic data (in bytes) for the past n hours.
 
     Simulates realistic network traffic patterns with daily cycles.
@@ -55,7 +56,7 @@ def generate_mock_historical_data(n_hours: int = 24) -> list[float]:
     return traffic
 
 
-def create_features_for_prediction(past_values: list[float], timestamp: datetime) -> pd.DataFrame:
+def create_features_for_prediction(past_values: List[float], timestamp: datetime) -> pd.DataFrame:
     """Create feature vector for a single prediction step.
 
     Features: lag_1..lag_23, rolling_mean_3, rolling_std_3, Hour, DayOfWeek, IsWeekend
@@ -80,7 +81,7 @@ def create_features_for_prediction(past_values: list[float], timestamp: datetime
     return pd.DataFrame([features])
 
 
-def forecast_next_24_hours(historical_data: list[float]) -> tuple[list[float], list[float], list[float]]:
+def forecast_next_24_hours(historical_data: List[float]) -> Tuple[List[float], List[float], List[float]]:
     """Generate 24-hour forecast using autoregressive approach.
 
     Args:
@@ -134,7 +135,7 @@ def forecast_next_24_hours(historical_data: list[float]) -> tuple[list[float], l
     return predictions, upper_bounds, lower_bounds
 
 
-def get_prediction_data() -> list[PredictionDataPoint]:
+def get_prediction_data() -> List[PredictionDataPoint]:
     """Generate 24-hour forecast with historical context."""
     # Generate mock historical data (24 hours)
     historical_bytes = generate_mock_historical_data(24)

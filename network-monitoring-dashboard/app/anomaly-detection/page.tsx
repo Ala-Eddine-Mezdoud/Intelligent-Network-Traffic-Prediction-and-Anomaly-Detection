@@ -40,18 +40,30 @@ export default function AnomalyDetection() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchAnomalies() {
       try {
         const res = await getAnomalies(searchTerm, severityFilter);
-        setAnomalies(res.anomalies);
+        if (mounted) {
+          setAnomalies(res.anomalies);
+        }
       } catch (error) {
         console.error('Failed to fetch anomalies:', error);
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchAnomalies();
+
+    const timer = setInterval(fetchAnomalies, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, [searchTerm, severityFilter]);
 
   const filteredAnomalies = anomalies;

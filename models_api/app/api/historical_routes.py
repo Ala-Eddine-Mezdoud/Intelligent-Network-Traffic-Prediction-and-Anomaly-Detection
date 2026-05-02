@@ -1,4 +1,6 @@
 """Historical data API routes."""
+from typing import List
+
 from fastapi import APIRouter, Query
 
 from app.schemas.historical import (
@@ -11,7 +13,7 @@ from app.schemas.historical import (
 router = APIRouter(prefix="/historical", tags=["historical"])
 
 
-def get_weekly_data() -> list[WeeklyDataPoint]:
+def get_weekly_data() -> List[WeeklyDataPoint]:
     return [
         WeeklyDataPoint(day="Mon", traffic=65, anomalies=3),
         WeeklyDataPoint(day="Tue", traffic=72, anomalies=5),
@@ -23,7 +25,7 @@ def get_weekly_data() -> list[WeeklyDataPoint]:
     ]
 
 
-def get_monthly_data() -> list[MonthlyDataPoint]:
+def get_monthly_data() -> List[MonthlyDataPoint]:
     return [
         MonthlyDataPoint(week="Week 1", traffic=450, peak=95),
         MonthlyDataPoint(week="Week 2", traffic=480, peak=105),

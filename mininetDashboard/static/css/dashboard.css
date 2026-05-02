@@ -178,6 +178,30 @@ h3 {
     gap: 7px;
 }
 
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 8px;
+    align-items: center;
+}
+
+.settings-grid label {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: "JetBrains Mono", monospace;
+}
+
+.settings-grid input {
+    width: 100%;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: "JetBrains Mono", monospace;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.92);
+}
+
 button {
     width: 100%;
     border: 0;

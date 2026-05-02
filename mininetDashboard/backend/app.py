@@ -1,5 +1,8 @@
 from flask import Flask
+import threading
+import time
 
+from .lab import lab_pipeline
 from .network_manager import manager
 from .routes import register_routes
 
@@ -21,5 +24,19 @@ def create_app():
         return response
 
     manager.start_async()
+
+    def boot_realtime_loop():
+        while True:
+            net = manager.net
+            if net is not None:
+                try:
+                    lab_pipeline.start_realtime(net, interval_seconds=30)
+                    return
+                except Exception:
+                    # Keep retrying so realtime mode eventually starts once dependencies are ready.
+                    pass
+            time.sleep(1)
+
+    threading.Thread(target=boot_realtime_loop, daemon=True).start()
 
     return app

@@ -1,4 +1,6 @@
 """Alerts API routes."""
+from typing import List
+
 from fastapi import APIRouter
 
 from app.schemas.alerts import AlertItem, AlertsResponse, AlertStatsResponse
@@ -6,7 +8,7 @@ from app.schemas.alerts import AlertItem, AlertsResponse, AlertStatsResponse
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
-def get_all_alerts() -> list[AlertItem]:
+def get_all_alerts() -> List[AlertItem]:
     return [
         AlertItem(
             id="1",
@@ -46,7 +48,7 @@ def get_all_alerts() -> list[AlertItem]:
     ]
 
 
-def calculate_alert_stats(alerts: list[AlertItem]) -> AlertStatsResponse:
+def calculate_alert_stats(alerts: List[AlertItem]) -> AlertStatsResponse:
     return AlertStatsResponse(
         total=len(alerts),
         critical=sum(1 for a in alerts if a.severity == "High"),

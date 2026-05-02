@@ -8,7 +8,7 @@ from .dashboard_bridge import (
     build_current_metrics,
     build_historical_traffic,
     build_predictions,
-    build_protocol_distribution,
+    build_protocol_distribution_from_inference,
     build_system_status,
     filter_anomalies,
     model_info_payload,
@@ -187,6 +187,83 @@ def register_routes(app):
         except Exception as exc:
             return jsonify({"error": str(exc)}), 400
 
+    @app.route("/api/realtime/start", methods=["POST"])
+    def realtime_start():
+        net = manager.net
+        if net is None:
+            return jsonify({"error": "Mininet is still starting"}), 503
+
+        payload = request.get_json(silent=True) or {}
+        interval_seconds = payload.get("interval_seconds", 30)
+
+        try:
+            return jsonify(lab_pipeline.start_realtime(net, interval_seconds=interval_seconds))
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/realtime/stop", methods=["POST"])
+    def realtime_stop():
+        return jsonify(lab_pipeline.stop_realtime())
+
+    @app.route("/api/realtime/status")
+    def realtime_status():
+        return jsonify(lab_pipeline.realtime_status())
+
+    @app.route("/api/realtime/settings", methods=["GET", "POST"])
+    def realtime_settings():
+        if request.method == "GET":
+            return jsonify(lab_pipeline.get_realtime_settings())
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            updated = lab_pipeline.update_realtime_settings(payload)
+            return jsonify(updated)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/pipeline/start", methods=["POST"])
+    def pipeline_start():
+        net = manager.net
+        if net is None:
+            return jsonify({"error": "Mininet is still starting"}), 503
+
+        payload = request.get_json(silent=True) or {}
+        interval_seconds = payload.get("interval_seconds", 30)
+
+        try:
+            result = lab_pipeline.start_realtime(net, interval_seconds=interval_seconds)
+            return jsonify(
+                {
+                    "pipeline": "realtime",
+                    "started": result.get("started", False),
+                    "interval_seconds": result.get("interval_seconds", interval_seconds),
+                }
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/pipeline/stop", methods=["POST"])
+    def pipeline_stop():
+        result = lab_pipeline.stop_realtime()
+        return jsonify({"pipeline": "realtime", **result})
+
+    @app.route("/api/pipeline/status")
+    def pipeline_status():
+        status = lab_pipeline.realtime_status()
+        return jsonify({"pipeline": "realtime", **status})
+
+    @app.route("/api/pipeline/settings", methods=["GET", "POST"])
+    def pipeline_settings():
+        if request.method == "GET":
+            return jsonify({"pipeline": "realtime", **lab_pipeline.get_realtime_settings()})
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            updated = lab_pipeline.update_realtime_settings(payload)
+            return jsonify({"pipeline": "realtime", **updated})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
     # Teammate dashboard compatibility endpoints.
     @app.route("/metrics/current")
     def metrics_current():
@@ -198,7 +275,7 @@ def register_routes(app):
 
     @app.route("/metrics/traffic/prediction")
     def metrics_prediction():
-        pred = build_predictions()
+        pred = build_predictions(lab_pipeline=lab_pipeline)
         return jsonify(
             {
                 "data": [
@@ -215,7 +292,7 @@ def register_routes(app):
 
     @app.route("/metrics/protocols/distribution")
     def metrics_protocols():
-        return jsonify({"data": build_protocol_distribution()})
+        return jsonify({"data": build_protocol_distribution_from_inference(lab_pipeline)})
 
     @app.route("/metrics/system/status")
     def metrics_system_status():
@@ -240,7 +317,7 @@ def register_routes(app):
 
     @app.route("/predictions")
     def predictions():
-        return jsonify({"data": build_predictions()})
+        return jsonify({"data": build_predictions(lab_pipeline=lab_pipeline)})
 
     @app.route("/predictions/model/metrics")
     def predictions_model_metrics():

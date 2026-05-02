@@ -1,4 +1,6 @@
 """Alerts schemas."""
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -11,7 +13,7 @@ class AlertItem(BaseModel):
 
 
 class AlertsResponse(BaseModel):
-    alerts: list[AlertItem]
+    alerts: List[AlertItem]
 
 
 class AlertStatsResponse(BaseModel):

@@ -42,29 +42,61 @@ export default function TrafficPrediction() {
   const [metrics, setMetrics] = useState<ModelMetrics | null>(null);
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchData() {
       try {
+        setError(null);
         const [predictionsRes, metricsRes, infoRes] = await Promise.all([
           getPredictions(),
           getModelMetrics(),
           getModelInfo(),
         ]);
+        if (!mounted) {
+          return;
+        }
         setPredictionData(predictionsRes.data);
         setMetrics(metricsRes);
         setModelInfo(infoRes);
       } catch (error) {
         console.error('Failed to fetch prediction data:', error);
+        if (!mounted) {
+          return;
+        }
+        setError(error instanceof Error ? error.message : 'Unknown API error');
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchData();
+
+    const timer = setInterval(fetchData, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, []);
 
   if (isLoading || !metrics || !modelInfo) {
+    if (!isLoading && error) {
+      return (
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="text-foreground font-semibold">Prediction API unavailable</div>
+              <div className="text-muted-foreground text-sm mt-2">{error}</div>
+            </div>
+          </div>
+        </DashboardLayout>
+      );
+    }
+
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">

@@ -5,6 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Query
 
 from app.schemas.anomalies import AnomalyItem, AnomaliesResponse
@@ -214,7 +215,7 @@ def generate_mock_network_flows(n_flows: int = 20) -> pd.DataFrame:
     return df
 
 
-def predict_anomalies(flow_data: pd.DataFrame) -> list[tuple[int, str, float]]:
+def predict_anomalies(flow_data: pd.DataFrame) -> List[Tuple[int, str, float]]:
     """Run network flows through IDS model to detect anomalies.
 
     Returns list of (predicted_class, class_name, confidence) tuples.
@@ -243,7 +244,7 @@ def predict_anomalies(flow_data: pd.DataFrame) -> list[tuple[int, str, float]]:
     return results
 
 
-def generate_anomalies_from_predictions() -> list[AnomalyItem]:
+def generate_anomalies_from_predictions() -> List[AnomalyItem]:
     """Generate anomalies by running mock data through the IDS model."""
     # Generate mock network flows
     flow_data = generate_mock_network_flows(n_flows=20)
@@ -310,10 +311,10 @@ def generate_anomalies_from_predictions() -> list[AnomalyItem]:
 
 
 def filter_anomalies(
-    anomalies: list[AnomalyItem],
-    search: str | None,
-    severity: str | None,
-) -> list[AnomalyItem]:
+    anomalies: List[AnomalyItem],
+    search: Optional[str],
+    severity: Optional[str],
+) -> List[AnomalyItem]:
     filtered = anomalies
 
     if search:
@@ -333,8 +334,8 @@ def filter_anomalies(
 
 @router.get("", response_model=AnomaliesResponse)
 async def read_anomalies(
-    search: str | None = Query(None, description="Search by IP or threat type"),
-    severity: str | None = Query(None, description="Filter by severity: High, Medium, Low, or all"),
+    search: Optional[str] = Query(None, description="Search by IP or threat type"),
+    severity: Optional[str] = Query(None, description="Filter by severity: High, Medium, Low, or all"),
 ):
     all_anomalies = generate_anomalies_from_predictions()
     filtered = filter_anomalies(all_anomalies, search, severity)

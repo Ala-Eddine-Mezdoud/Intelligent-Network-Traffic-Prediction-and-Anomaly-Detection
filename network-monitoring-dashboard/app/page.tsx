@@ -64,6 +64,8 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchData() {
       try {
         const [metricsRes, predictionRes, protocolRes, statusRes] = await Promise.all([
@@ -72,6 +74,9 @@ export default function Dashboard() {
           getProtocolDistribution(),
           getSystemStatus(),
         ]);
+        if (!mounted) {
+          return;
+        }
         setMetrics(metricsRes);
         setPredictionData(predictionRes.data);
         setProtocolData(protocolRes.data);
@@ -79,11 +84,19 @@ export default function Dashboard() {
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchData();
+
+    const timer = setInterval(fetchData, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, []);
 
   if (isLoading || !metrics || !systemStatus) {
