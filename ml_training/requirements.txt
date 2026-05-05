@@ -1,0 +1,21 @@
+# GNN Training Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core ML
+torch>=2.0.0
+torch-geometric>=2.3.0
+torch-scatter
+torch-sparse
+
+# Data & Utilities
+numpy>=1.24.0
+tqdm>=4.65.0
+scikit-learn>=1.3.0
+
+# Optional: For advanced models
+torchmetrics>=1.0.0
+
+# Development
+jupyterlab>=4.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
