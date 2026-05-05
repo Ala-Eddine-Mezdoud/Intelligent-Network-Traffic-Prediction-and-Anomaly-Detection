@@ -14,6 +14,9 @@ from .dashboard_bridge import (
     model_info_payload,
     model_metrics_payload,
 )
+from .gnn_data_generator import gnn_generator
+import os
+from pathlib import Path
 from .lab import lab_pipeline
 from .network_manager import manager
 from .services import (
@@ -97,6 +100,44 @@ def register_routes(app):
             return jsonify(fetch_controller_flows(RYU_BASE_URL))
         except Exception as exc:
             return jsonify({"error": str(exc)})
+
+
+    # GNN Dataset Generation Endpoints
+    @app.route("/api/lab/run-gnn-capture", methods=["POST"])
+    def gnn_capture_start():
+        net = manager.net
+        if net is None:
+            return jsonify({"error": "Mininet is not running"}), 503
+        
+        payload = request.get_json(silent=True) or {}
+        scenarios = payload.get("scenarios")
+        
+        try:
+            gnn_generator.start(net, scenarios=scenarios)
+            return jsonify({"status": "started"})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/lab/gnn-capture/stop", methods=["POST"])
+    def gnn_capture_stop():
+        gnn_generator.stop()
+        return jsonify({"status": "stopped"})
+
+    @app.route("/api/lab/gnn-capture/status")
+    def gnn_capture_status():
+        return jsonify(gnn_generator.status())
+
+    @app.route("/api/lab/gnn-datasets")
+    def gnn_datasets():
+        from .gnn_data_generator import GNN_DATASET_DIR
+        path = Path(GNN_DATASET_DIR)
+        datasets = []
+        if path.exists():
+            for d in path.iterdir():
+                if d.is_dir():
+                    datasets.append(d.name)
+        return jsonify({"datasets": sorted(datasets, reverse=True)})
+
 
     # Dataset generation controls: packet capture, synthetic traffic, and feature export.
     @app.route("/api/lab/status")
