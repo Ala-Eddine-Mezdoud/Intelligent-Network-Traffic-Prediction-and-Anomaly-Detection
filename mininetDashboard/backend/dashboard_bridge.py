@@ -52,7 +52,14 @@ def build_historical_traffic(hours=24):
     return data
 
 
-def build_predictions(hours=24):
+def build_predictions(hours=24, lab_pipeline=None):
+    if lab_pipeline is not None:
+        latest = _get_latest_inference(lab_pipeline)
+        inf = latest.get("inference") or {}
+        pred = inf.get("predictions")
+        if isinstance(pred, list) and pred:
+            return pred
+
     now = datetime.now().replace(minute=0, second=0, microsecond=0)
     data = []
 
@@ -80,6 +87,15 @@ def build_protocol_distribution():
         {"name": "SSH", "value": 13},
         {"name": "ICMP", "value": 13},
     ]
+
+
+def build_protocol_distribution_from_inference(lab_pipeline):
+    latest = _get_latest_inference(lab_pipeline)
+    inf = latest.get("inference") or {}
+    protocol_data = inf.get("protocol_distribution")
+    if isinstance(protocol_data, list) and protocol_data:
+        return protocol_data
+    return build_protocol_distribution()
 
 
 def build_system_status(lab_pipeline):
@@ -147,6 +163,10 @@ def build_anomalies(lab_pipeline):
     latest = _get_latest_inference(lab_pipeline)
     inf = latest.get("inference") or {}
 
+    anomaly_items = inf.get("anomaly_items")
+    if isinstance(anomaly_items, list) and anomaly_items:
+        return anomaly_items
+
     suspicious = int(inf.get("suspicious_flows", 0) or 0)
     sev = str(inf.get("severity", "low")).title()
 
@@ -195,9 +215,11 @@ def model_metrics_payload():
 
 
 def model_info_payload():
-    return {
+    payload = {
         "model_type": "Hybrid (Forecasting + Anomaly Detection)",
         "training_data": "CICIDS-style generated flows + simulated replay",
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
         "prediction_horizon": "24 hours ahead",
     }
+
+    return payload

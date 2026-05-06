@@ -1,10 +1,19 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+//Flask backend from mininetDashboard service.
+const apiEnv = (globalThis as any)?.process?.env?.NEXT_PUBLIC_API_URL as string | undefined;
+const fallbackHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+const API_BASE_URL = apiEnv || `http://${fallbackHost}:5000`;
 
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const url = new URL(`${API_BASE_URL}${endpoint}`);
+  if (options?.method !== 'POST' && options?.method !== 'PUT' && options?.method !== 'DELETE') {
+    url.searchParams.append('_t', Date.now().toString());
+  }
+
+  const response = await fetch(url.toString(), {
     headers: {
       'Content-Type': 'application/json',
     },
+    cache: 'no-store',
     ...options,
   });
 
@@ -120,4 +129,45 @@ export async function getModelInfo() {
     last_updated: string;
     prediction_horizon: string;
   }>('/predictions/model/info');
+}
+
+// ----- GNN Data Generation API -----
+export async function startGnnCapture(params: {
+  scenarios?: string[];
+  window_seconds?: number;
+  prediction_horizons?: number[];
+  random_seed?: number;
+}) {
+  return fetchApi<any>('/api/lab/run-gnn-capture', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function stopGnnCapture() {
+  return fetchApi<any>('/api/lab/gnn-capture/stop', {
+    method: 'POST',
+  });
+}
+
+export async function getGnnCaptureStatus() {
+  return fetchApi<{
+    running: boolean;
+    current_scenario: string | null;
+    current_phase: string | null;
+    progress_pct: number;
+    last_run: string | null;
+    last_error: string | null;
+    last_result: any;
+  }>('/api/lab/gnn-capture/status');
+}
+
+export async function getGnnDatasets() {
+  return fetchApi<{
+    datasets: Array<{
+      run_id: string;
+      path: string;
+      summary?: any;
+    }>;
+  }>('/api/lab/gnn-datasets');
 }

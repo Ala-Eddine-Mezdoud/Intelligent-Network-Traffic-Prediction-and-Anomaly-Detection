@@ -1,0 +1,283 @@
+{
+  "run_id": "gnn_20260505_181430",
+  "scenario_name": "multi_scenario",
+  "total_windows": 1233,
+  "window_seconds": 6,
+  "node_names": [
+    "dc_monitor",
+    "dc_pub_dns",
+    "dc_vpn",
+    "dc_web",
+    "e1_dhcp",
+    "e1_dns",
+    "e1_erp",
+    "e1_pc1",
+    "e1_pc2",
+    "e2_crm",
+    "e2_dhcp",
+    "e2_dns",
+    "e2_pc1",
+    "e2_pc2",
+    "h1_iot",
+    "h1_pc",
+    "h1_tv",
+    "h2_cam",
+    "h2_nas",
+    "h2_pc",
+    "isp_r1",
+    "r_dc",
+    "r_ent1",
+    "r_ent2",
+    "r_home1",
+    "r_home2"
+  ],
+  "node_index": {
+    "dc_monitor": 0,
+    "dc_pub_dns": 1,
+    "dc_vpn": 2,
+    "dc_web": 3,
+    "e1_dhcp": 4,
+    "e1_dns": 5,
+    "e1_erp": 6,
+    "e1_pc1": 7,
+    "e1_pc2": 8,
+    "e2_crm": 9,
+    "e2_dhcp": 10,
+    "e2_dns": 11,
+    "e2_pc1": 12,
+    "e2_pc2": 13,
+    "h1_iot": 14,
+    "h1_pc": 15,
+    "h1_tv": 16,
+    "h2_cam": 17,
+    "h2_nas": 18,
+    "h2_pc": 19,
+    "isp_r1": 20,
+    "r_dc": 21,
+    "r_ent1": 22,
+    "r_ent2": 23,
+    "r_home1": 24,
+    "r_home2": 25
+  },
+  "node_ips": {
+    "dc_monitor": "172.16.1.40",
+    "dc_pub_dns": "172.16.1.53",
+    "dc_vpn": "172.16.1.30",
+    "dc_web": "172.16.1.20",
+    "e1_dhcp": "10.10.1.2",
+    "e1_dns": "10.10.1.53",
+    "e1_erp": "10.10.1.40",
+    "e1_pc1": "10.10.1.11",
+    "e1_pc2": "10.10.1.12",
+    "e2_crm": "10.20.1.41",
+    "e2_dhcp": "10.20.1.2",
+    "e2_dns": "10.20.1.53",
+    "e2_pc1": "10.20.1.11",
+    "e2_pc2": "10.20.1.12",
+    "h1_iot": "192.168.10.31",
+    "h1_pc": "192.168.10.11",
+    "h1_tv": "192.168.10.21",
+    "h2_cam": "192.168.20.21",
+    "h2_nas": "192.168.20.31",
+    "h2_pc": "192.168.20.11",
+    "isp_r1": "10.255.0.1",
+    "r_dc": "10.255.0.30",
+    "r_ent1": "10.255.0.11",
+    "r_ent2": "10.255.0.12",
+    "r_home1": "10.255.0.21",
+    "r_home2": "10.255.0.22"
+  },
+  "edges": [
+    [
+      "dc_monitor",
+      "dc_sw"
+    ],
+    [
+      "dc_pub_dns",
+      "dc_sw"
+    ],
+    [
+      "dc_vpn",
+      "dc_sw"
+    ],
+    [
+      "dc_web",
+      "dc_sw"
+    ],
+    [
+      "e1_dhcp",
+      "ent1_sw"
+    ],
+    [
+      "e1_dns",
+      "ent1_sw"
+    ],
+    [
+      "e1_erp",
+      "ent1_sw"
+    ],
+    [
+      "e1_pc1",
+      "ent1_sw"
+    ],
+    [
+      "e1_pc2",
+      "ent1_sw"
+    ],
+    [
+      "e2_crm",
+      "ent2_sw"
+    ],
+    [
+      "e2_dhcp",
+      "ent2_sw"
+    ],
+    [
+      "e2_dns",
+      "ent2_sw"
+    ],
+    [
+      "e2_pc1",
+      "ent2_sw"
+    ],
+    [
+      "e2_pc2",
+      "ent2_sw"
+    ],
+    [
+      "h1_iot",
+      "home1_sw"
+    ],
+    [
+      "h1_pc",
+      "home1_sw"
+    ],
+    [
+      "h1_tv",
+      "home1_sw"
+    ],
+    [
+      "h2_cam",
+      "home2_sw"
+    ],
+    [
+      "h2_nas",
+      "home2_sw"
+    ],
+    [
+      "h2_pc",
+      "home2_sw"
+    ],
+    [
+      "isp_r1",
+      "isp_core"
+    ],
+    [
+      "r_dc",
+      "dc_sw"
+    ],
+    [
+      "r_dc",
+      "isp_core"
+    ],
+    [
+      "r_ent1",
+      "ent1_sw"
+    ],
+    [
+      "r_ent1",
+      "isp_core"
+    ],
+    [
+      "r_ent2",
+      "ent2_sw"
+    ],
+    [
+      "r_ent2",
+      "isp_core"
+    ],
+    [
+      "r_home1",
+      "home1_sw"
+    ],
+    [
+      "r_home1",
+      "isp_core"
+    ],
+    [
+      "r_home2",
+      "home2_sw"
+    ],
+    [
+      "r_home2",
+      "isp_core"
+    ]
+  ],
+  "edge_index": [],
+  "node_feature_names": [
+    "bytes_sent",
+    "bytes_recv",
+    "pkts_sent",
+    "pkts_recv",
+    "pkt_drops",
+    "latency_ms",
+    "jitter_ms",
+    "tcp_connections",
+    "retransmits",
+    "queue_depth_bytes",
+    "queue_depth_pkts",
+    "bandwidth_limit_mbit",
+    "netem_delay_ms",
+    "netem_loss_pct"
+  ],
+  "edge_feature_names": [
+    "bytes_through",
+    "utilization_pct",
+    "active_flows",
+    "protocol_tcp_pct",
+    "protocol_udp_pct",
+    "protocol_icmp_pct"
+  ],
+  "label_to_index": {
+    "NORMAL": 0,
+    "RECOVERY": 1,
+    "CONGESTION_BUILDUP": 2,
+    "CONGESTION_ACTIVE": 3,
+    "LATENCY_DEGRADING": 4,
+    "LATENCY_CRITICAL": 5,
+    "PACKET_LOSS_MILD": 6,
+    "PACKET_LOSS_SEVERE": 7,
+    "JITTER_HIGH": 8,
+    "BANDWIDTH_THROTTLED": 9,
+    "BROWNOUT": 10,
+    "LINK_FAILURE": 11,
+    "DDOS_BUILDUP": 12,
+    "DDOS_ACTIVE": 13,
+    "DDOS_SOURCE": 14,
+    "DDOS_TARGET": 15,
+    "PORTSCAN_RECON": 16,
+    "BRUTE_FORCE_PROBE": 17,
+    "BRUTE_FORCE_ACTIVE": 18,
+    "LATERAL_MOVEMENT": 19,
+    "EXFILTRATION": 20
+  },
+  "prediction_horizons": [
+    15,
+    30,
+    60
+  ],
+  "scenarios_run": [
+    "ddos_ramp_dc_web",
+    "congestion_buildup_ent1",
+    "latency_degradation_home1",
+    "packet_loss_cascade_dc",
+    "portscan_to_exploitation",
+    "link_failure_brownout_home2",
+    "bandwidth_saturation_streaming",
+    "service_degradation_dc_monitor",
+    "multi_node_congestion_spread",
+    "mixed_ddos_during_congestion",
+    "voip_rtp_quality_degradation",
+    "brute_force_escalation_ssh"
+  ]
+}

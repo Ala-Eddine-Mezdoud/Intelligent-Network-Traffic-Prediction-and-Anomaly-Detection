@@ -1,4 +1,6 @@
 """Metrics schemas."""
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -16,7 +18,7 @@ class TrafficDataPoint(BaseModel):
 
 
 class HistoricalTrafficResponse(BaseModel):
-    data: list[TrafficDataPoint]
+    data: List[TrafficDataPoint]
 
 
 class PredictionDataPoint(BaseModel):
@@ -27,4 +29,4 @@ class PredictionDataPoint(BaseModel):
 
 
 class TrafficPredictionResponse(BaseModel):
-    data: list[PredictionDataPoint]
+    data: List[PredictionDataPoint]

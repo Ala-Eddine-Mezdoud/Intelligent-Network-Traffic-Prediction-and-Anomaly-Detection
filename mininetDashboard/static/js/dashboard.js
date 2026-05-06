@@ -9,6 +9,61 @@ let labelSel = null;
 let currentCaptureId = null;
 let controlOnlyMode = false;
 
+function getNumericField(id, fallback = 0) {
+    const el = document.getElementById(id);
+    if (!el) {
+        return fallback;
+    }
+    const value = Number(el.value);
+    return Number.isFinite(value) ? value : fallback;
+}
+
+function setFieldValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el) {
+        return;
+    }
+    el.value = value;
+}
+
+function collectRealtimeSettingsFromForm() {
+    return {
+        attack_interval_min_seconds: Math.floor(getNumericField("rtAttackMin", 60)),
+        attack_interval_max_seconds: Math.floor(getNumericField("rtAttackMax", 300)),
+        attack_intensity: getNumericField("rtAttackIntensity", 1.0),
+        protocol_mix_weights: {
+            icmp: Math.floor(getNumericField("rtWIcmp", 55)),
+            http: Math.floor(getNumericField("rtWHttp", 75)),
+            dns: Math.floor(getNumericField("rtWDns", 65)),
+            dhcp: Math.floor(getNumericField("rtWDhcp", 40)),
+            quic_udp: Math.floor(getNumericField("rtWQuic", 60)),
+            ftp: Math.floor(getNumericField("rtWFtp", 35)),
+            ssh: Math.floor(getNumericField("rtWSsh", 45)),
+            igmp: Math.floor(getNumericField("rtWIgmp", 25)),
+        },
+    };
+}
+
+function applyRealtimeSettingsToForm(settings) {
+    if (!settings) {
+        return;
+    }
+
+    setFieldValue("rtAttackMin", settings.attack_interval_min_seconds || 60);
+    setFieldValue("rtAttackMax", settings.attack_interval_max_seconds || 300);
+    setFieldValue("rtAttackIntensity", settings.attack_intensity || 1.0);
+
+    const mix = settings.protocol_mix_weights || {};
+    setFieldValue("rtWIcmp", mix.icmp || 55);
+    setFieldValue("rtWHttp", mix.http || 75);
+    setFieldValue("rtWDns", mix.dns || 65);
+    setFieldValue("rtWDhcp", mix.dhcp || 40);
+    setFieldValue("rtWQuic", mix.quic_udp || 60);
+    setFieldValue("rtWFtp", mix.ftp || 35);
+    setFieldValue("rtWSsh", mix.ssh || 45);
+    setFieldValue("rtWIgmp", mix.igmp || 25);
+}
+
 const TYPE_COLORS = {
     switch: "#1467b3",
     router: "#8f3fc0",
@@ -401,6 +456,11 @@ async function loadTopology() {
 function updateLabStatusText(status) {
     // Show both current and last finished capture/export context.
     const bits = [];
+    bits.push(`realtime:${status.realtime_running ? "running" : "idle"}`);
+    if (status.realtime_interval_seconds) {
+        bits.push(`interval:${status.realtime_interval_seconds}s`);
+    }
+
     bits.push(`capture:${status.capture_running ? "running" : "idle"}`);
     bits.push(`traffic:${status.traffic_running ? "running" : "idle"}`);
 
@@ -413,6 +473,17 @@ function updateLabStatusText(status) {
 
     if (status.last_inference && status.last_inference.inference) {
         bits.push(`ai:${status.last_inference.inference.severity}`);
+    }
+
+    if (status.last_realtime_error) {
+        bits.push(`rt_error:${status.last_realtime_error}`);
+    }
+
+    if (status.next_attack_profile) {
+        bits.push(`next_attack:${status.next_attack_profile}`);
+    }
+    if (typeof status.next_attack_in_seconds === "number") {
+        bits.push(`next_in:${status.next_attack_in_seconds}s`);
     }
 
     document.getElementById("labStatus").innerText = bits.join(" | ");
@@ -432,6 +503,38 @@ async function refreshLabStatus() {
     }
 
     updateLabStatusText(payload);
+}
+
+async function loadRealtimeSettings() {
+    const response = await fetch("/api/pipeline/settings");
+    const payload = await response.json();
+
+    if (payload.error) {
+        document.getElementById("labOutput").innerText = `Load settings failed: ${payload.error}`;
+        return;
+    }
+
+    applyRealtimeSettingsToForm(payload);
+    document.getElementById("labOutput").innerText = "Realtime settings loaded";
+}
+
+async function saveRealtimeSettings() {
+    const settings = collectRealtimeSettingsFromForm();
+    const response = await fetch("/api/pipeline/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+    });
+    const payload = await response.json();
+
+    if (payload.error) {
+        document.getElementById("labOutput").innerText = `Save settings failed: ${payload.error}`;
+        throw new Error(payload.error);
+    }
+
+    applyRealtimeSettingsToForm(payload);
+    document.getElementById("labOutput").innerText = "Realtime settings saved";
+    await refreshLabStatus();
 }
 
 async function startCapture() {
@@ -509,25 +612,6 @@ async function stopTraffic() {
     await refreshLabStatus();
 }
 
-async function exportLabFeatures() {
-    // Export uses the most recent capture id when available.
-    const response = await fetch("/api/lab/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ capture_id: currentCaptureId }),
-    });
-    const payload = await response.json();
-
-    if (payload.error) {
-        document.getElementById("labOutput").innerText = `Export failed: ${payload.error}`;
-        return;
-    }
-
-    document.getElementById("labOutput").innerText =
-        `CSV exported\nCapture: ${payload.capture_id}\nFlows: ${payload.flow_count}\nPath: ${payload.csv_path}`;
-
-    await refreshLabStatus();
-}
 
 async function relayToCollector() {
     const response = await fetch("/api/lab/relay", {
@@ -564,6 +648,42 @@ async function runInference() {
     const inf = payload.inference || {};
     document.getElementById("labOutput").innerText =
         `AI inference completed\nCapture: ${payload.capture_id}\nFlows: ${payload.collector_flow_count}\nSeverity: ${inf.severity || "n/a"}\nRisk: ${inf.risk_score || 0}\nReport: ${payload.inference_path}`;
+
+    await refreshLabStatus();
+}
+
+async function startRealtimePipeline() {
+    await saveRealtimeSettings();
+
+    const interval = Math.floor(getNumericField("rtInterval", 30));
+    const response = await fetch("/api/pipeline/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval_seconds: interval }),
+    });
+    const payload = await response.json();
+
+    if (payload.error) {
+        document.getElementById("labOutput").innerText = `Realtime start failed: ${payload.error}`;
+        return;
+    }
+
+    document.getElementById("labOutput").innerText =
+        `Realtime pipeline started\nInterval: ${payload.interval_seconds || interval}s\nMode: capture -> relay -> AI infer`;
+
+    await refreshLabStatus();
+}
+
+async function stopRealtimePipeline() {
+    const response = await fetch("/api/pipeline/stop", { method: "POST" });
+    const payload = await response.json();
+
+    if (payload.error) {
+        document.getElementById("labOutput").innerText = `Realtime stop failed: ${payload.error}`;
+        return;
+    }
+
+    document.getElementById("labOutput").innerText = "Realtime pipeline stopped";
 
     await refreshLabStatus();
 }
@@ -611,12 +731,6 @@ document.getElementById("btnLabStopTraffic").addEventListener("click", () => {
     });
 });
 
-document.getElementById("btnLabExport").addEventListener("click", () => {
-    exportLabFeatures().catch((err) => {
-        document.getElementById("labOutput").innerText = `Export error: ${err}`;
-    });
-});
-
 document.getElementById("btnLabRelay").addEventListener("click", () => {
     relayToCollector().catch((err) => {
         document.getElementById("labOutput").innerText = `Relay error: ${err}`;
@@ -626,6 +740,30 @@ document.getElementById("btnLabRelay").addEventListener("click", () => {
 document.getElementById("btnLabInfer").addEventListener("click", () => {
     runInference().catch((err) => {
         document.getElementById("labOutput").innerText = `Inference error: ${err}`;
+    });
+});
+
+document.getElementById("btnPipelineStart").addEventListener("click", () => {
+    startRealtimePipeline().catch((err) => {
+        document.getElementById("labOutput").innerText = `Realtime start error: ${err}`;
+    });
+});
+
+document.getElementById("btnPipelineStop").addEventListener("click", () => {
+    stopRealtimePipeline().catch((err) => {
+        document.getElementById("labOutput").innerText = `Realtime stop error: ${err}`;
+    });
+});
+
+document.getElementById("btnRtLoadSettings").addEventListener("click", () => {
+    loadRealtimeSettings().catch((err) => {
+        document.getElementById("labOutput").innerText = `Load settings error: ${err}`;
+    });
+});
+
+document.getElementById("btnRtSaveSettings").addEventListener("click", () => {
+    saveRealtimeSettings().catch((err) => {
+        document.getElementById("labOutput").innerText = `Save settings error: ${err}`;
     });
 });
 
@@ -649,6 +787,8 @@ loadTopology().catch((err) => {
 refreshLabStatus().catch((err) => {
     document.getElementById("labStatus").innerText = `Lab status failed: ${err}`;
 });
+
+loadRealtimeSettings().catch(() => {});
 
 window.setInterval(() => {
     refreshLabStatus().catch(() => {});

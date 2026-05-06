@@ -1,4 +1,6 @@
 """Anomaly detection schemas."""
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -13,5 +15,5 @@ class AnomalyItem(BaseModel):
 
 
 class AnomaliesResponse(BaseModel):
-    anomalies: list[AnomalyItem]
+    anomalies: List[AnomalyItem]
     total: int

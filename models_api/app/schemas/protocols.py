@@ -1,4 +1,6 @@
 """Protocol schemas."""
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -8,4 +10,4 @@ class ProtocolDistributionItem(BaseModel):
 
 
 class ProtocolDistributionResponse(BaseModel):
-    data: list[ProtocolDistributionItem]
+    data: List[ProtocolDistributionItem]

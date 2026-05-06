@@ -2,6 +2,56 @@
 
 This guide explains how to run the Network Traffic Prediction & Anomaly Detection system.
 
+## Phase-1 (Mininet + Dashboard) Quick Start
+
+Use this mode for the integrated SDN simulation, realtime inference pipeline, and dashboard UI.
+
+### Terminal 1: Mininet backend (Flask + topology)
+
+```bash
+cd /home/mininet/projects/Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection/mininetDashboard
+sudo -E env PYTHONPATH="$HOME/.local/lib/python3.8/site-packages" /usr/bin/python3 sdn_dashboard.py
+```
+
+### Terminal 2: Ryu controller
+
+```bash
+ryu-manager ryu.app.simple_switch_13 ryu.app.ofctl_rest
+```
+
+### Terminal 3: Next.js monitoring dashboard
+
+```bash
+cd /home/mininet/projects/Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection/network-monitoring-dashboard
+export PATH="$HOME/.local/node20/bin:$PATH"
+npm install
+npm run dev
+```
+
+### Verify backend readiness
+
+```bash
+curl -s http://127.0.0.1:5000/api/topology
+```
+
+If topology returns `{"error":"Mininet is still starting"}`, wait until it returns full topology JSON.
+
+### Start realtime pipeline manually
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/pipeline/start \
+    -H "Content-Type: application/json" \
+    -d '{"interval_seconds":30}'
+```
+
+Check status:
+
+```bash
+curl -s http://127.0.0.1:5000/api/pipeline/status
+```
+
+`"running":true` means Lab is active.
+
 ## Prerequisites
 
 - Python 3.10+ with Anaconda/conda
@@ -138,6 +188,14 @@ ip addr | grep 192.168
 | API connection errors | Ensure backend is running on port 8000 |
 | `npm install` fails | Delete `node_modules` and lock files, then reinstall |
 | Port 3000 in use | Next.js will automatically use next available port |
+
+### Phase-1 specific issues
+
+| Issue | Solution |
+|-------|----------|
+| `Can't resolve 'tailwindcss' in .../Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection` | Run `npm run dev` only from `network-monitoring-dashboard` (not repository root). Then run `npm install` there. |
+| Dashboard pages stuck on `Loading...` | Check backend API directly: `curl -s http://127.0.0.1:5000/api/lab/status`. If it times out, restart backend using the command in Phase-1 section. |
+| Start realtime but Lab stays idle | Mininet may still be booting. Wait for `curl -s http://127.0.0.1:5000/api/topology` to return full topology JSON, then retry `/api/pipeline/start`. |
 
 ---
 
