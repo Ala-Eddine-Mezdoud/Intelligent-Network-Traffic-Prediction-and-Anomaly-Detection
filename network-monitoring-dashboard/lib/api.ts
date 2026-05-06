@@ -1,173 +1,253 @@
-//Flask backend from mininetDashboard service.
-const apiEnv = (globalThis as any)?.process?.env?.NEXT_PUBLIC_API_URL as string | undefined;
-const fallbackHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-const API_BASE_URL = apiEnv || `http://${fallbackHost}:5000`;
+import { supabase } from './supabase'
 
-async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const url = new URL(`${API_BASE_URL}${endpoint}`);
-  if (options?.method !== 'POST' && options?.method !== 'PUT' && options?.method !== 'DELETE') {
-    url.searchParams.append('_t', Date.now().toString());
-  }
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    cache: 'no-store',
-    ...options,
-  });
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-// Metrics API
+// Metrics API -> Supabase RPC helpers
 export async function getCurrentMetrics() {
-  return fetchApi<{
+  const { data, error } = await supabase.rpc('get_current_metrics')
+  if (error) throw new Error(error.message)
+  return data as {
     current_traffic_mbps: number;
     active_connections: number;
     anomaly_score_percent: number;
     alerts_today: number;
-  }>('/metrics/current');
+  }
 }
 
 export async function getHistoricalTraffic() {
-  return fetchApi<{
-    data: Array<{ time: string; traffic: number; predicted: number }>;
-  }>('/metrics/traffic/historical');
+  const { data, error } = await supabase
+    .from('historical_aggregates')
+    .select('*')
+    .eq('bucket_type', 'daily')
+    .order('bucket_start', { ascending: true })
+    .limit(7)
+  if (error) throw new Error(error.message)
+  return {
+    data: (data || []).map((row) => ({
+      time: new Date(row.bucket_start).toLocaleDateString('en-US', { weekday: 'short' }),
+      traffic: Number(row.avg_traffic_mbps || 0),
+      predicted: Number(row.peak_traffic_mbps || 0),
+    })),
+  }
 }
 
 export async function getTrafficPrediction() {
-  return fetchApi<{
-    data: Array<{ time: string; predicted: number; upper: number; lower: number }>;
-  }>('/metrics/traffic/prediction');
+  const { data, error } = await supabase
+    .from('predictions')
+    .select('prediction_for, predicted_value, upper_bound, lower_bound')
+    .order('prediction_for', { ascending: true })
+    .limit(24)
+  if (error) throw new Error(error.message)
+  return {
+    data: (data || []).map((row) => ({
+      time: new Date(row.prediction_for).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      predicted: Number(row.predicted_value),
+      upper: Number(row.upper_bound),
+      lower: Number(row.lower_bound),
+    })),
+  }
 }
 
 export async function getProtocolDistribution() {
-  return fetchApi<{
-    data: Array<{ name: string; value: number }>;
-  }>('/metrics/protocols/distribution');
+  const { data, error } = await supabase
+    .from('protocol_distribution')
+    .select('name, value_pct')
+    .order('sampled_at', { ascending: false })
+    .limit(10)
+  if (error) throw new Error(error.message)
+  return {
+    data: (data || []).map((row) => ({ name: row.name, value: Number(row.value_pct) })),
+  }
 }
 
 export async function getSystemStatus() {
-  return fetchApi<{
-    network_health_percent: number;
-    anomaly_detection_percent: number;
-    threat_level: string;
-  }>('/metrics/system/status');
+  const { data, error } = await supabase.rpc('get_current_metrics')
+  if (error) throw new Error(error.message)
+  const safe = data as any
+  return {
+    network_health_percent: Number(safe?.current_traffic_mbps || 0),
+    anomaly_detection_percent: Number(safe?.anomaly_score_percent || 0),
+    threat_level: safe?.alerts_today > 5 ? 'High' : safe?.alerts_today > 0 ? 'Medium' : 'Low',
+  }
 }
 
 // Alerts API
 export async function getAlerts() {
-  return fetchApi<{
-    alerts: Array<{
-      id: string;
-      title: string;
-      description: string;
-      time: string;
-      severity: string;
-    }>;
-  }>('/alerts');
+  const { data, error } = await supabase
+    .from('alerts')
+    .select('id, title, description, triggered_at, severity, status')
+    .order('triggered_at', { ascending: false })
+    .limit(50)
+  if (error) throw new Error(error.message)
+  return {
+    alerts: (data || []).map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      time: new Date(row.triggered_at).toLocaleString('en-US'),
+      severity: row.severity,
+    })),
+  }
 }
 
 export async function getAlertStats() {
-  return fetchApi<{
-    total: number;
-    critical: number;
-    warnings: number;
-  }>('/alerts/stats');
+  const { data, error } = await supabase.rpc('get_alert_stats')
+  if (error) throw new Error(error.message)
+  return data as { total: number; critical: number; warnings: number }
 }
 
 // Anomalies API
 export async function getAnomalies(search?: string, severity?: string) {
-  const params = new URLSearchParams();
-  if (search) params.append('search', search);
-  if (severity && severity !== 'all') params.append('severity', severity);
-  
-  return fetchApi<{
-    anomalies: Array<{
-      id: string;
-      timestamp: string;
-      source_ip: string;
-      dest_ip: string;
-      threat_type: string;
-      severity: string;
-      status: string;
-    }>;
-    total: number;
-  }>(`/anomalies?${params.toString()}`);
+  let query = supabase
+    .from('anomalies')
+    .select('id, detected_at, source_ip, dest_ip, threat_type, severity, status', { count: 'exact' })
+    .order('detected_at', { ascending: false })
+
+  if (severity && severity !== 'all') {
+    query = query.eq('severity', severity)
+  }
+  if (search) {
+    query = query.ilike('threat_type', `%${search}%`)
+  }
+
+  const { data, error, count } = await query.limit(50)
+  if (error) throw new Error(error.message)
+  return {
+    anomalies: (data || []).map((row) => ({
+      id: row.id,
+      timestamp: new Date(row.detected_at).toLocaleString('en-US'),
+      source_ip: row.source_ip ?? 'unknown',
+      dest_ip: row.dest_ip ?? 'unknown',
+      threat_type: row.threat_type,
+      severity: row.severity,
+      status: row.status,
+    })),
+    total: count || 0,
+  }
 }
 
 // Predictions API
 export async function getPredictions() {
-  return fetchApi<{
-    data: Array<{
-      time: string;
-      historical: number | null;
-      predicted: number;
-      upper: number;
-      lower: number;
-    }>;
-  }>('/predictions');
+  const { data, error } = await supabase
+    .from('predictions')
+    .select('prediction_for, historical_value, predicted_value, upper_bound, lower_bound')
+    .order('prediction_for', { ascending: true })
+    .limit(24)
+  if (error) throw new Error(error.message)
+  return {
+    data: (data || []).map((row) => ({
+      time: new Date(row.prediction_for).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      historical: row.historical_value ? Number(row.historical_value) : null,
+      predicted: Number(row.predicted_value),
+      upper: Number(row.upper_bound),
+      lower: Number(row.lower_bound),
+    })),
+  }
 }
 
 export async function getModelMetrics() {
-  return fetchApi<{
-    mae_mbps: number;
-    rmse_mbps: number;
-    accuracy_percent: number;
-  }>('/predictions/model/metrics');
+  const { data, error } = await supabase
+    .from('model_registry')
+    .select('mae_mbps, rmse_mbps, accuracy_percent')
+    .eq('is_production', true)
+    .limit(1)
+    .single()
+  if (error) {
+    return { mae_mbps: 0, rmse_mbps: 0, accuracy_percent: 0 }
+  }
+  return data as { mae_mbps: number; rmse_mbps: number; accuracy_percent: number }
 }
 
 export async function getModelInfo() {
-  return fetchApi<{
-    model_type: string;
-    training_data: string;
-    last_updated: string;
-    prediction_horizon: string;
-  }>('/predictions/model/info');
+  const { data, error } = await supabase
+    .from('model_registry')
+    .select('model_type, training_data, last_deployed_at, name')
+    .eq('is_production', true)
+    .limit(1)
+    .single()
+  if (error) {
+    return { model_type: 'N/A', training_data: 'N/A', last_updated: 'N/A', prediction_horizon: 'N/A' }
+  }
+  return {
+    model_type: data.model_type,
+    training_data: data.training_data || 'N/A',
+    last_updated: data.last_deployed_at ? new Date(data.last_deployed_at).toLocaleDateString('en-US') : 'N/A',
+    prediction_horizon: data.name || 'N/A',
+  }
 }
 
-// ----- GNN Data Generation API -----
+// ----- GNN Data Generation API (placeholder using Supabase) -----
 export async function startGnnCapture(params: {
   scenarios?: string[];
   window_seconds?: number;
   prediction_horizons?: number[];
   random_seed?: number;
 }) {
-  return fetchApi<any>('/api/lab/run-gnn-capture', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
+  const { data, error } = await supabase
+    .from('gnn_datasets')
+    .insert({
+      run_id: `run_${Date.now()}`,
+      window_seconds: params.window_seconds ?? 5,
+      prediction_horizons: params.prediction_horizons ?? [15, 30, 60],
+      scenario_names: params.scenarios ?? [],
+      status: 'pending',
+      started_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return { started: true, id: data.id }
 }
 
 export async function stopGnnCapture() {
-  return fetchApi<any>('/api/lab/gnn-capture/stop', {
-    method: 'POST',
-  });
+  return { stopped: true }
 }
 
 export async function getGnnCaptureStatus() {
-  return fetchApi<{
-    running: boolean;
-    current_scenario: string | null;
-    current_phase: string | null;
-    progress_pct: number;
-    last_run: string | null;
-    last_error: string | null;
-    last_result: any;
-  }>('/api/lab/gnn-capture/status');
+  const { data, error } = await supabase
+    .from('gnn_datasets')
+    .select('status, scenario_names, started_at, completed_at, error_message')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (error) {
+    return {
+      running: false,
+      current_scenario: null,
+      current_phase: null,
+      progress_pct: 0,
+      last_run: null,
+      last_error: null,
+      last_result: null,
+    }
+  }
+  const running = data?.status === 'running' || data?.status === 'pending'
+  return {
+    running,
+    current_scenario: data?.scenario_names?.[0] ?? null,
+    current_phase: running ? 'running' : data?.status ?? null,
+    progress_pct: data?.status === 'completed' ? 100 : running ? 50 : 0,
+    last_run: data?.started_at ? new Date(data.started_at).toISOString() : null,
+    last_error: data?.error_message ?? null,
+    last_result: data,
+  }
 }
 
 export async function getGnnDatasets() {
-  return fetchApi<{
-    datasets: Array<{
-      run_id: string;
-      path: string;
-      summary?: any;
-    }>;
-  }>('/api/lab/gnn-datasets');
+  const { data, error } = await supabase
+    .from('gnn_datasets')
+    .select('run_id, dataset_path, total_windows, status, label_distribution')
+    .order('started_at', { ascending: false })
+    .limit(20)
+  if (error) throw new Error(error.message)
+  return {
+    datasets: (data || []).map((row) => ({
+      run_id: row.run_id,
+      path: row.dataset_path || '',
+      summary: {
+        total_windows: row.total_windows,
+        label_distribution: row.label_distribution,
+        status: row.status,
+      },
+    })),
+  }
 }
+
