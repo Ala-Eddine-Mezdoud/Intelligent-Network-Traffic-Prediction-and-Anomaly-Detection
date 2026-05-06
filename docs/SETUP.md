@@ -151,11 +151,23 @@ npm run dev
 
 Create a `.env` file in `network-monitoring-dashboard` if you need to customize the API URL:
 
-```env
+```env 
+# ML models API (FastAPI)
 NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+
 
 Default is `http://localhost:8000` if not specified.
+
+# SDN Simulation backend (Flask + Mininet VM)
+NEXT_PUBLIC_SDN_API_URL=http://<YOUR-VM-IP>:5000
+```
+
+For `NEXT_PUBLIC_SDN_API_URL`, replace `<YOUR-VM-IP>` with your Mininet VM's host-only IP.
+Find it inside the VM with:
+```bash
+ip addr | grep 192.168
+```
+
 
 ---
 
