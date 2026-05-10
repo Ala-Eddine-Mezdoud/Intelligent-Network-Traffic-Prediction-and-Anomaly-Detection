@@ -1,42 +1,77 @@
-"""Anomalies API routes using IDS classification model."""
+"""
+Anomalies API routes — migrated to use the GNN (TemporalGAT) model
+from gnn_training_notebook instead of the old IDS sklearn pipeline.
+
+CHANGED: entire inference backend replaced. The old pipeline was a
+         scikit-learn joblib model (ids_pipeline.pkl) that consumed
+         50 tabular network-flow features. The new model is a
+         PyTorch Graph Neural Network (TemporalGAT) that consumes
+         graph snapshots: sequences of [num_nodes × seq_len × 14]
+         node-feature tensors plus a fixed edge_index topology.
+         Both models classify network anomaly types, but the data
+         shapes, loading mechanism, and inference path are entirely
+         different.
+"""
+
+# ── Standard library ────────────────────────────────────────────────────────
+import json
 import os
 import random
-import joblib
-import numpy as np
-import pandas as pd
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+# ── Third-party ──────────────────────────────────────────────────────────────
+import numpy as np
+
+# CHANGED: removed `joblib` (used to load ids_pipeline.pkl).
+#          The GNN model is saved with torch.save(), so we need torch instead.
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# CHANGED: added torch_geometric imports — required by TemporalGAT's
+#          GATConv layers and the Data container used for graph inference.
+from torch_geometric.data import Data
+from torch_geometric.nn import GATConv
+
+# ── FastAPI / internal ───────────────────────────────────────────────────────
 from fastapi import APIRouter, Query
 
 from app.schemas.anomalies import AnomalyItem, AnomaliesResponse
 
 router = APIRouter(prefix="/anomalies", tags=["anomalies"])
 
-# Load the IDS pipeline model once at startup
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "models", "ids_pipeline.pkl")
-_model = None
+# ── Model paths ──────────────────────────────────────────────────────────────
+# CHANGED: old path pointed to models/ids_pipeline.pkl (joblib artifact).
+#          New model is a .pt checkpoint produced by torch.save() in the
+#          notebook's final cell.  label_mapping.json is a separate file
+#          also saved by the notebook; it carries index_to_label and
+#          node_names so we do NOT hard-code class names here.
+_MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+GNN_MODEL_PATH = _MODELS_DIR / "gnn_model_complete.pt"
+LABEL_MAPPING_PATH = _MODELS_DIR / "label_mapping.json"
 
-# Class mapping from notebook training
-CLASS_NAMES = {
-    0: "BENIGN",
-    1: "Bot",
-    2: "DDoS",
-    3: "DoS GoldenEye",
-    4: "DoS Hulk",
-    5: "DoS Slowhttptest",
-    6: "DoS slowloris",
-    7: "FTP-Patator",
-    8: "Heartbleed",
-    9: "Infiltration",
-    10: "PortScan",
-    11: "SSH-Patator",
-    12: "Web Attack – Brute Force",
-    13: "Web Attack – SQL Injection",
-    14: "Web Attack – XSS",
-}
+# ── Module-level singletons (lazy-loaded) ────────────────────────────────────
+_gnn_model: Optional["TemporalGAT"] = None
+_label_mapping: Optional[Dict] = None
+_device: Optional[torch.device] = None
 
-# Severity mapping for different attack types
-ATTACK_SEVERITY = {
+# ── GNN hyper-parameters (must match the saved checkpoint) ──────────────────
+# CHANGED: these constants replace TOP_FEATURES and CLASS_NAMES.
+#          The GNN notebook fixes node_feature_dim=14 and seq_len=5.
+#          num_classes is loaded dynamically from label_mapping.json so it
+#          stays in sync if the notebook is retrained with a different label set.
+GNN_NODE_FEATURE_DIM = 14   # features per node per time-step
+GNN_SEQ_LEN = 5              # temporal window length
+GNN_NUM_NODES = 26           # nodes in the network graph (from dataset metadata)
+
+# Severity table — kept compatible with the old API contract so the
+# dashboard does not need changes.  Label strings now come from
+# label_mapping.json rather than the hard-coded CLASS_NAMES dict.
+# CHANGED: keys now match GNN label strings (may differ slightly from old IDS
+#          class names).  Add/update entries whenever the notebook is retrained.
+ATTACK_SEVERITY: Dict[str, str] = {
     "BENIGN": "Low",
     "Bot": "High",
     "DDoS": "High",
@@ -49,243 +84,456 @@ ATTACK_SEVERITY = {
     "Infiltration": "Critical",
     "PortScan": "Medium",
     "SSH-Patator": "Medium",
-    "Web Attack – Brute Force": "High",
-    "Web Attack – SQL Injection": "Critical",
-    "Web Attack – XSS": "High",
+    "Web Attack - Brute Force": "High",
+    "Web Attack - SQL Injection": "Critical",
+    "Web Attack - XSS": "High",
+    # GNN may also predict these aggregated labels from its richer label set:
+    "NetworkScan": "Medium",
+    "Reconnaissance": "Medium",
+    "Exploit": "High",
+    "Malware": "High",
+    "C2": "Critical",
+    "Exfiltration": "Critical",
 }
 
-# Features the model expects (extracted from error message)
-TOP_FEATURES = [
-    'Bwd Packet Length Mean', 'Bwd Packet Length Max', 'Idle Mean', 'PSH Flag Count',
-    'Flow IAT Max', 'Fwd IAT Std', 'Packet Length Mean', 'Packet Length Variance',
-    'min_seg_size_forward', 'Destination Port', 'Max Packet Length', 'Flow Duration',
-    'Bwd Packet Length Min', 'Init_Win_bytes_forward', 'act_data_pkt_fwd', 'ACK Flag Count',
-    'Flow IAT Std', 'FIN Flag Count', 'Total Fwd Packets', 'Min Packet Length',
-    'Fwd Header Length', 'Fwd Packet Length Std', 'Bwd IAT Total', 'Flow IAT Mean',
-    'Fwd Packet Length Mean', 'Fwd IAT Mean', 'Down/Up Ratio', 'Bwd Header Length',
-    'Bwd IAT Max', 'Fwd Packet Length Max', 'Bwd IAT Std', 'Total Length of Fwd Packets',
-    'Bwd Packets/s', 'Fwd PSH Flags', 'Fwd Packet Length Min', 'URG Flag Count',
-    'Bwd IAT Mean', 'Init_Win_bytes_backward', 'Idle Std', 'Fwd IAT Min',
-    'Flow IAT Min', 'Flow Packets/s', 'Bwd IAT Min', 'Active Mean', 'Active Max',
-    'Active Min', 'Flow Bytes/s', 'Active Std', 'RST Flag Count', 'Fwd URG Flags'
-]
 
-
-def load_model():
-    """Lazy-load the IDS pipeline model."""
-    global _model
-    if _model is None:
-        if os.path.exists(MODEL_PATH):
-            loaded = joblib.load(MODEL_PATH)
-            # Handle dict format: extract model from common keys
-            if isinstance(loaded, dict):
-                for key in ['model', 'pipeline', 'classifier', 'estimator', 'clf']:
-                    if key in loaded:
-                        _model = loaded[key]
-                        break
-                else:
-                    # If no recognized key, try the first value
-                    _model = list(loaded.values())[0]
-            else:
-                _model = loaded
-        else:
-            raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
-    return _model
-
-
-def generate_mock_network_flows(n_flows: int = 20) -> pd.DataFrame:
-    """Generate mock network flow data matching the model's expected features."""
-    np.random.seed(42)
-    flows = []
-
-    for i in range(n_flows):
-        is_attack = random.random() < 0.3
-
-        if is_attack:
-            base_flow = {
-                # Features in model order
-                'Bwd Packet Length Mean': random.uniform(50, 1000),
-                'Bwd Packet Length Max': random.uniform(100, 2000),
-                'Idle Mean': random.uniform(0, 1000000),
-                'PSH Flag Count': random.choice([0, 1, 1, 1]),
-                'Flow IAT Max': random.uniform(100, 10000000),
-                'Fwd IAT Std': random.uniform(0, 500000),
-                'Packet Length Mean': random.uniform(50, 1000),
-                'Packet Length Variance': random.uniform(100, 100000),
-                'min_seg_size_forward': random.uniform(0, 64),
-                'Destination Port': random.choice([22, 23, 80, 443, 3389, 445, 21]),
-                'Max Packet Length': random.uniform(100, 2000),
-                'Flow Duration': random.uniform(1000, 10000000),
-                'Bwd Packet Length Min': random.uniform(0, 100),
-                'Init_Win_bytes_forward': random.uniform(100, 65535),
-                'act_data_pkt_fwd': random.uniform(0, 5000),
-                'ACK Flag Count': random.choice([0, 1, 1, 1]),
-                'Flow IAT Std': random.uniform(10, 500000),
-                'FIN Flag Count': random.choice([0, 0, 0, 1]),
-                'Total Fwd Packets': random.uniform(10, 10000),
-                'Min Packet Length': random.uniform(0, 100),
-                'Fwd Header Length': random.uniform(20, 500),
-                'Fwd Packet Length Std': random.uniform(10, 400),
-                'Bwd IAT Total': random.uniform(0, 5000000),
-                'Flow IAT Mean': random.uniform(10, 100000),
-                'Fwd Packet Length Mean': random.uniform(50, 800),
-                'Fwd IAT Mean': random.uniform(0, 100000),
-                'Down/Up Ratio': random.uniform(0.1, 10),
-                'Bwd Header Length': random.uniform(20, 500),
-                'Bwd IAT Max': random.uniform(0, 5000000),
-                'Fwd Packet Length Max': random.uniform(100, 1500),
-                'Bwd IAT Std': random.uniform(0, 250000),
-                'Total Length of Fwd Packets': random.uniform(500, 1000000),
-                'Bwd Packets/s': random.uniform(1, 5000),
-                'Fwd PSH Flags': random.choice([0, 1]),
-                'Fwd Packet Length Min': random.uniform(0, 100),
-                'URG Flag Count': random.choice([0, 0, 0, 1]),
-                'Bwd IAT Mean': random.uniform(0, 50000),
-                'Init_Win_bytes_backward': random.uniform(100, 65535),
-                'Idle Std': random.uniform(0, 500000),
-                'Fwd IAT Min': random.uniform(0, 1000),
-                'Flow IAT Min': random.uniform(0, 1000),
-                'Flow Packets/s': random.uniform(1, 10000),
-                'Bwd IAT Min': random.uniform(0, 1000),
-                'Active Mean': random.uniform(0, 100000),
-                'Active Max': random.uniform(0, 500000),
-                'Active Min': random.uniform(0, 10000),
-                'Flow Bytes/s': random.uniform(100, 1000000),
-                'Active Std': random.uniform(0, 50000),
-                'RST Flag Count': random.choice([0, 0, 0, 1]),
-                'Fwd URG Flags': random.choice([0, 0, 0, 1]),
-            }
-        else:
-            base_flow = {
-                'Bwd Packet Length Mean': random.uniform(50, 800),
-                'Bwd Packet Length Max': random.uniform(50, 1500),
-                'Idle Mean': random.uniform(0, 100000),
-                'PSH Flag Count': random.choice([0, 0, 1, 1]),
-                'Flow IAT Max': random.uniform(100, 1000000),
-                'Fwd IAT Std': random.uniform(0, 50000),
-                'Packet Length Mean': random.uniform(50, 800),
-                'Packet Length Variance': random.uniform(0, 10000),
-                'min_seg_size_forward': random.uniform(0, 64),
-                'Destination Port': random.choice([80, 443, 53, 123, 25, 110, 143, 993, 995]),
-                'Max Packet Length': random.uniform(50, 1500),
-                'Flow Duration': random.uniform(100, 1000000),
-                'Bwd Packet Length Min': random.uniform(0, 100),
-                'Init_Win_bytes_forward': random.uniform(1000, 65535),
-                'act_data_pkt_fwd': random.uniform(0, 100),
-                'ACK Flag Count': random.choice([0, 1, 1, 1, 1]),
-                'Flow IAT Std': random.uniform(0, 50000),
-                'FIN Flag Count': random.choice([0, 0, 0, 0, 1]),
-                'Total Fwd Packets': random.uniform(1, 100),
-                'Min Packet Length': random.uniform(0, 100),
-                'Fwd Header Length': random.uniform(20, 200),
-                'Fwd Packet Length Std': random.uniform(0, 400),
-                'Bwd IAT Total': random.uniform(0, 500000),
-                'Flow IAT Mean': random.uniform(10, 10000),
-                'Fwd Packet Length Mean': random.uniform(50, 800),
-                'Fwd IAT Mean': random.uniform(0, 10000),
-                'Down/Up Ratio': random.uniform(0.5, 2),
-                'Bwd Header Length': random.uniform(20, 200),
-                'Bwd IAT Max': random.uniform(0, 500000),
-                'Fwd Packet Length Max': random.uniform(50, 1500),
-                'Bwd IAT Std': random.uniform(0, 25000),
-                'Total Length of Fwd Packets': random.uniform(50, 50000),
-                'Bwd Packets/s': random.uniform(0.1, 500),
-                'Fwd PSH Flags': random.choice([0, 0, 0, 1]),
-                'Fwd Packet Length Min': random.uniform(0, 100),
-                'URG Flag Count': 0,
-                'Bwd IAT Mean': random.uniform(0, 5000),
-                'Init_Win_bytes_backward': random.uniform(1000, 65535),
-                'Idle Std': random.uniform(0, 50000),
-                'Fwd IAT Min': random.uniform(0, 1000),
-                'Flow IAT Min': random.uniform(0, 1000),
-                'Flow Packets/s': random.uniform(0.1, 1000),
-                'Bwd IAT Min': random.uniform(0, 1000),
-                'Active Mean': random.uniform(0, 10000),
-                'Active Max': random.uniform(0, 50000),
-                'Active Min': random.uniform(0, 1000),
-                'Flow Bytes/s': random.uniform(10, 100000),
-                'Active Std': random.uniform(0, 5000),
-                'RST Flag Count': random.choice([0, 0, 0, 0, 1]),
-                'Fwd URG Flags': 0,
-            }
-
-        flows.append(base_flow)
-
-    df = pd.DataFrame(flows)
-    return df
-
-
-def predict_anomalies(flow_data: pd.DataFrame) -> List[Tuple[int, str, float]]:
-    """Run network flows through IDS model to detect anomalies.
-
-    Returns list of (predicted_class, class_name, confidence) tuples.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# TemporalGAT — inline definition so the route file is self-contained and
+# torch.load() can reconstruct the model without importing the notebook.
+#
+# CHANGED: the old code never needed a model class definition because
+#          joblib.load() restores sklearn pipelines transparently.
+#          PyTorch's torch.load()/load_state_dict() requires the class to be
+#          present in scope at load time.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class TemporalGAT(nn.Module):
     """
-    model = load_model()
+    Temporal Graph Attention Network — copied verbatim from gnn_training_notebook.
+    CHANGED: this class was absent in the old routes file. It must be defined
+             here (or imported from a shared module) so load_state_dict() works.
+    """
 
-    # Select only the top features the model was trained on
-    available_features = [f for f in TOP_FEATURES if f in flow_data.columns]
-    X = flow_data[available_features].fillna(0)
+    def __init__(
+        self,
+        node_feature_dim: int = 14,
+        hidden_dim: int = 128,
+        num_classes: int = 21,
+        seq_len: int = 5,
+        num_gat_layers: int = 3,
+        num_heads: int = 4,
+        dropout: float = 0.3,
+    ):
+        super().__init__()
 
-    # Make predictions
-    predictions = model.predict(X)
+        self.node_feature_dim = node_feature_dim
+        self.hidden_dim = hidden_dim
+        self.num_classes = num_classes
+        self.seq_len = seq_len
+        self.dropout = dropout
 
-    # Get prediction probabilities if available
-    try:
-        proba = model.predict_proba(X)
-        confidences = [np.max(p) for p in proba]
-    except:
-        confidences = [0.85] * len(predictions)  # Default confidence
+        # Temporal encoder: bi-directional LSTM over the seq_len dimension
+        self.temporal_encoder = nn.LSTM(
+            input_size=node_feature_dim,
+            hidden_size=hidden_dim // 2,
+            num_layers=2,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout if seq_len > 1 else 0,
+        )
 
-    results = []
-    for pred, conf in zip(predictions, confidences):
-        class_name = CLASS_NAMES.get(int(pred), "Unknown")
-        results.append((int(pred), class_name, float(conf)))
+        # Stack of GAT layers
+        self.gat_layers = nn.ModuleList()
+        self.gat_layers.append(
+            GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                concat=True,
+            )
+        )
+        for _ in range(num_gat_layers - 2):
+            self.gat_layers.append(
+                GATConv(
+                    in_channels=hidden_dim,
+                    out_channels=hidden_dim // num_heads,
+                    heads=num_heads,
+                    dropout=dropout,
+                    concat=True,
+                )
+            )
+        self.gat_layers.append(
+            GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
+                heads=1,
+                dropout=dropout,
+                concat=False,
+            )
+        )
+
+        self.layer_norms = nn.ModuleList(
+            [nn.LayerNorm(hidden_dim) for _ in range(num_gat_layers)]
+        )
+
+        # Node-level classifier
+        self.node_classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, num_classes),
+        )
+
+        # Graph-level pooling + window classifier
+        self.graph_pool = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
+        self.window_classifier = nn.Sequential(
+            nn.Linear(hidden_dim // 2 + num_classes, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, num_classes),
+        )
+
+    def forward(self, data: Data):
+        x, edge_index = data.x, data.edge_index
+        batch = data.batch if hasattr(data, "batch") and data.batch is not None else None
+
+        if batch is not None:
+            return self._forward_batch(data)
+
+        # ── Single-graph forward (inference path used here) ──────────────────
+        x_flat = x.view(-1, self.seq_len, self.node_feature_dim)
+        lstm_out, _ = self.temporal_encoder(x_flat)
+        x_encoded = lstm_out[:, -1, :]  # last time-step hidden state
+
+        h = x_encoded
+        for gat, norm in zip(self.gat_layers, self.layer_norms):
+            h_new = gat(h, edge_index)
+            h_new = F.elu(h_new)
+            h_new = norm(h_new)
+            h_new = F.dropout(h_new, p=self.dropout, training=self.training)
+            h = h + h_new if h.shape == h_new.shape else h_new
+
+        node_logits = self.node_classifier(h)
+
+        h_pooled = self.graph_pool(h)
+        h_graph = (torch.max(h_pooled, dim=0)[0] + torch.mean(h_pooled, dim=0)) / 2
+
+        node_probs = F.softmax(node_logits, dim=-1)
+        max_node_pred = torch.max(node_probs, dim=0)[0]
+
+        window_input = torch.cat([h_graph, max_node_pred], dim=0).unsqueeze(0)
+        window_logits = self.window_classifier(window_input)
+
+        return node_logits, window_logits
+
+    def _forward_batch(self, data: Data):
+        """Batched forward — kept for completeness but not used in inference."""
+        x, edge_index, batch = data.x, data.edge_index, data.batch
+        num_graphs = int(batch.max().item()) + 1
+        num_nodes_per_graph = x.shape[0] // num_graphs
+
+        x_reshaped = x.view(
+            num_graphs * num_nodes_per_graph, self.seq_len, self.node_feature_dim
+        )
+        lstm_out, _ = self.temporal_encoder(x_reshaped)
+        x_encoded = lstm_out[:, -1, :]
+
+        h = x_encoded
+        for gat, norm in zip(self.gat_layers, self.layer_norms):
+            h_new = gat(h, edge_index)
+            h_new = F.elu(h_new)
+            h_new = norm(h_new)
+            h_new = F.dropout(h_new, p=self.dropout, training=self.training)
+            h = h + h_new if h.shape == h_new.shape else h_new
+
+        node_logits = self.node_classifier(h)
+        h_pooled = self.graph_pool(h)
+
+        h_graph_max = torch.zeros(num_graphs, h_pooled.shape[1], device=h.device)
+        h_graph_mean = torch.zeros(num_graphs, h_pooled.shape[1], device=h.device)
+        for i in range(num_graphs):
+            mask = batch == i
+            h_graph_max[i] = torch.max(h_pooled[mask], dim=0)[0]
+            h_graph_mean[i] = torch.mean(h_pooled[mask], dim=0)
+
+        h_graph = (h_graph_max + h_graph_mean) / 2
+        max_node_pred = torch.zeros(num_graphs, self.num_classes, device=h.device)
+        for i in range(num_graphs):
+            mask = batch == i
+            node_probs = F.softmax(node_logits[mask], dim=-1)
+            max_node_pred[i] = torch.max(node_probs, dim=0)[0]
+
+        window_input = torch.cat([h_graph, max_node_pred], dim=-1)
+        window_logits = self.window_classifier(window_input)
+        return node_logits, window_logits
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Model + label-mapping loader
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _get_device() -> torch.device:
+    """Return (and cache) the compute device."""
+    global _device
+    if _device is None:
+        _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return _device
+
+
+def load_label_mapping() -> Dict:
+    """
+    Load label_mapping.json saved by the notebook.
+
+    CHANGED: old code used a hard-coded CLASS_NAMES dict.
+             The GNN notebook writes label_mapping.json containing
+             label_to_index and index_to_label; we read it at runtime
+             so label changes in future training runs are picked up
+             automatically without editing this file.
+    """
+    global _label_mapping
+    if _label_mapping is None:
+        if not LABEL_MAPPING_PATH.exists():
+            raise FileNotFoundError(
+                f"label_mapping.json not found at {LABEL_MAPPING_PATH}. "
+                "Run the gnn_training_notebook to regenerate it."
+            )
+        with open(LABEL_MAPPING_PATH, "r") as f:
+            raw = json.load(f)
+        # index_to_label keys are strings in JSON; convert to int
+        _label_mapping = {
+            "label_to_index": raw["label_to_index"],
+            "index_to_label": {int(k): v for k, v in raw["index_to_label"].items()},
+            "node_names": raw.get("node_names", []),
+        }
+    return _label_mapping
+
+
+def load_gnn_model() -> TemporalGAT:
+    """
+    Lazy-load the TemporalGAT model from the .pt checkpoint.
+
+    CHANGED: old load_model() called joblib.load() on ids_pipeline.pkl and
+             handled dict / pipeline variants.
+             New loader calls torch.load() on gnn_model_complete.pt, extracts
+             the CONFIG dict to reconstruct the exact architecture, then calls
+             load_state_dict() to restore weights.
+             Running in eval() + no_grad is essential for inference correctness
+             (disables dropout and batch-norm training behaviour).
+    """
+    global _gnn_model
+    if _gnn_model is None:
+        if not GNN_MODEL_PATH.exists():
+            raise FileNotFoundError(
+                f"GNN model not found at {GNN_MODEL_PATH}. "
+                "Run the gnn_training_notebook to train and save the model."
+            )
+
+        device = _get_device()
+
+        # CHANGED: torch.load() replaces joblib.load()
+        checkpoint = torch.load(GNN_MODEL_PATH, map_location=device)
+
+        # The notebook saves: model_state_dict, config, history, test_metrics
+        config = checkpoint.get("config", {})
+
+        # Load label mapping to get num_classes dynamically
+        mapping = load_label_mapping()
+        num_classes = len(mapping["label_to_index"])
+
+        # Reconstruct architecture with the exact hyper-params used during training
+        # CHANGED: the old pipeline had no architecture to reconstruct — sklearn
+        #          pipelines are fully serialised by joblib.
+        _gnn_model = TemporalGAT(
+            node_feature_dim=GNN_NODE_FEATURE_DIM,
+            hidden_dim=config.get("hidden_dim", 128),
+            num_classes=num_classes,
+            seq_len=config.get("seq_len", GNN_SEQ_LEN),
+            num_gat_layers=config.get("num_gat_layers", 3),
+            num_heads=config.get("num_heads", 4),
+            dropout=config.get("dropout", 0.3),
+        ).to(device)
+
+        _gnn_model.load_state_dict(checkpoint["model_state_dict"])
+        _gnn_model.eval()  # CHANGED: required — disables dropout at inference time
+
+    return _gnn_model
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Mock graph-snapshot generator
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _build_fully_connected_edge_index(num_nodes: int) -> torch.Tensor:
+    """
+    Build a fully-connected edge_index for num_nodes nodes.
+
+    CHANGED: the old pipeline had no graph topology concept — it processed
+             independent tabular rows.  The GNN requires an edge_index tensor
+             of shape [2, num_edges].  When real topology metadata is not
+             available at inference time we fall back to a fully-connected
+             graph, which mirrors the notebook's own fallback logic in
+             NetworkGNNDataset._build_edge_index().
+    """
+    edges = [
+        [i, j]
+        for i in range(num_nodes)
+        for j in range(num_nodes)
+        if i != j
+    ]
+    return torch.tensor(edges, dtype=torch.long).t().contiguous()
+
+
+def generate_mock_graph_snapshot(num_nodes: int = GNN_NUM_NODES) -> Data:
+    """
+    Generate a single synthetic graph snapshot for demo/fallback inference.
+
+    CHANGED: the old generate_mock_network_flows() produced a pandas DataFrame
+             with 50 named tabular features per flow (one row = one sample).
+             The GNN operates on graph Data objects where:
+               x            : [num_nodes, seq_len, node_feature_dim] float tensor
+               edge_index   : [2, num_edges] long tensor
+             No pandas or sklearn feature selection is needed.
+    """
+    np.random.seed(42)
+
+    # Simulate node features across seq_len time-steps
+    # Each of the 14 features represents a per-node network metric
+    # (e.g. byte rates, packet counts, connection state flags aggregated per node)
+    node_features = torch.tensor(
+        np.random.randn(num_nodes, GNN_SEQ_LEN, GNN_NODE_FEATURE_DIM).astype(np.float32)
+    )
+
+    edge_index = _build_fully_connected_edge_index(num_nodes)
+
+    return Data(x=node_features, edge_index=edge_index)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GNN inference
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def predict_with_gnn(graph_data: Data) -> List[Tuple[int, str, float]]:
+    """
+    Run a graph snapshot through TemporalGAT and return per-node predictions.
+
+    Returns a list of (class_index, class_name, confidence) tuples,
+    one entry per node in the graph.
+
+    CHANGED: old predict_anomalies() called model.predict(X) and
+             model.predict_proba(X) — the sklearn API.
+             The GNN forward() returns (node_logits, window_logits) tensors.
+             We apply softmax to node_logits to get per-node class probabilities,
+             then argmax for the predicted class.
+             window_logits gives a single window-level prediction which is also
+             surfaced (see generate_anomalies_from_gnn()).
+    """
+    model = load_gnn_model()
+    mapping = load_label_mapping()
+    index_to_label: Dict[int, str] = mapping["index_to_label"]
+    device = _get_device()
+
+    graph_data = graph_data.to(device)
+
+    # CHANGED: torch.no_grad() replaces the bare try/except around predict_proba.
+    #          It is mandatory to avoid computing unnecessary gradients.
+    with torch.no_grad():
+        node_logits, _window_logits = model(graph_data)
+
+    # Per-node probabilities: [num_nodes, num_classes]
+    node_probs = F.softmax(node_logits, dim=-1).cpu().numpy()
+
+    results: List[Tuple[int, str, float]] = []
+    for probs in node_probs:
+        pred_idx = int(np.argmax(probs))
+        confidence = float(np.max(probs))
+        label = index_to_label.get(pred_idx, f"Class_{pred_idx}")
+        results.append((pred_idx, label, confidence))
 
     return results
 
 
-def generate_anomalies_from_predictions() -> List[AnomalyItem]:
-    """Generate anomalies by running mock data through the IDS model."""
-    # Generate mock network flows
-    flow_data = generate_mock_network_flows(n_flows=20)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Anomaly generation from GNN predictions
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    # Get predictions from model
-    predictions = predict_anomalies(flow_data)
+def generate_anomalies_from_gnn() -> List[AnomalyItem]:
+    """
+    Run mock graph data through the GNN and convert node predictions to AnomalyItems.
 
-    # Convert predictions to AnomalyItems
-    anomalies = []
+    CHANGED: replaces generate_anomalies_from_predictions().
+             Key differences:
+               - Input is a graph Data object, not a pandas DataFrame
+               - Predictions are per-node (one entry per network node),
+                 not per flow-row
+               - source_ip is mapped from the node_names list in label_mapping
+                 when available, making IPs more semantically meaningful
+               - The AnomalyItem schema and returned JSON structure are
+                 UNCHANGED so the dashboard requires no modifications.
+    """
+    graph_snapshot = generate_mock_graph_snapshot()
+
+    # CHANGED: call predict_with_gnn() instead of predict_anomalies()
+    predictions = predict_with_gnn(graph_snapshot)
+
+    # Optionally use node_names for IP labelling
+    mapping = load_label_mapping()
+    node_names: List[str] = mapping.get("node_names", [])
+
+    anomalies: List[AnomalyItem] = []
     base_time = datetime.now()
 
-    for i, (pred_class, class_name, confidence) in enumerate(predictions):
-        # Skip benign traffic (class 0) - only return actual anomalies
-        if class_name == "BENIGN":
+    for node_idx, (pred_class, class_name, confidence) in enumerate(predictions):
+        # Skip benign nodes — same logic as the old implementation
+        if class_name.upper() == "BENIGN":
             continue
 
-        # Generate realistic IP addresses
-        source_ip = f"{random.randint(1, 223)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+        # Use node name as source IP hint when available
+        # CHANGED: old code used purely random IPs; now we reflect the node
+        #          identity from the graph topology when metadata is present.
+        if node_idx < len(node_names):
+            # node_names are identifiers like "router-1" or "192.168.x.x"
+            raw_name = node_names[node_idx]
+            source_ip = raw_name if _looks_like_ip(raw_name) else _node_name_to_ip(raw_name, node_idx)
+        else:
+            source_ip = (
+                f"{random.randint(1, 223)}.{random.randint(0, 255)}"
+                f".{random.randint(0, 255)}.{random.randint(1, 254)}"
+            )
+
         dest_ip = f"192.168.{random.randint(0, 255)}.{random.randint(1, 254)}"
 
-        # Map to severity
         severity = ATTACK_SEVERITY.get(class_name, "Medium")
+        timestamp = (base_time - timedelta(minutes=random.randint(1, 120))).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
-        # Generate timestamp (recent)
-        timestamp = (base_time - timedelta(minutes=random.randint(1, 120))).strftime("%Y-%m-%d %H:%M:%S")
+        # CHANGED: status logic is identical to the old implementation —
+        #          kept intentionally for dashboard compatibility.
+        status = (
+            "Ongoing" if confidence > 0.9
+            else "Resolved" if confidence < 0.7
+            else "Investigating"
+        )
 
-        # Determine status based on confidence
-        status = "Ongoing" if confidence > 0.9 else "Resolved" if confidence < 0.7 else "Investigating"
+        anomalies.append(
+            AnomalyItem(
+                id=str(node_idx + 1),
+                timestamp=timestamp,
+                source_ip=source_ip,
+                dest_ip=dest_ip,
+                threat_type=class_name,
+                severity=severity,
+                status=status,
+            )
+        )
 
-        anomalies.append(AnomalyItem(
-            id=str(i + 1),
-            timestamp=timestamp,
-            source_ip=source_ip,
-            dest_ip=dest_ip,
-            threat_type=class_name,
-            severity=severity,
-            status=status,
-        ))
-
-    # If no attacks detected, add a few simulated ones for demo
-    if len(anomalies) == 0:
+    # Fallback: if GNN predicts all nodes benign, return demo items
+    # CHANGED: same fallback philosophy as the old code; kept for resilience.
+    if not anomalies:
         anomalies = [
             AnomalyItem(
                 id="1",
@@ -310,11 +558,38 @@ def generate_anomalies_from_predictions() -> List[AnomalyItem]:
     return anomalies
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Small helpers
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _looks_like_ip(s: str) -> bool:
+    """Return True if s looks like an IPv4 address."""
+    parts = s.split(".")
+    if len(parts) != 4:
+        return False
+    return all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+
+
+def _node_name_to_ip(name: str, fallback_idx: int) -> str:
+    """
+    Derive a deterministic fake IP from a node name string.
+    CHANGED: new helper — needed because GNN node identities are named
+             network entities rather than anonymous flow rows.
+    """
+    h = hash(name) % (255 * 255)
+    return f"10.{(h >> 8) & 0xFF}.{h & 0xFF}.{(fallback_idx % 254) + 1}"
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Filtering — UNCHANGED from original
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 def filter_anomalies(
     anomalies: List[AnomalyItem],
     search: Optional[str],
     severity: Optional[str],
 ) -> List[AnomalyItem]:
+    """Filter anomalies by search string and severity. Logic unchanged."""
     filtered = anomalies
 
     if search:
@@ -332,11 +607,26 @@ def filter_anomalies(
     return filtered
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# FastAPI route — signature and response model UNCHANGED
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 @router.get("", response_model=AnomaliesResponse)
 async def read_anomalies(
     search: Optional[str] = Query(None, description="Search by IP or threat type"),
-    severity: Optional[str] = Query(None, description="Filter by severity: High, Medium, Low, or all"),
+    severity: Optional[str] = Query(
+        None, description="Filter by severity: High, Medium, Low, Critical, or all"
+    ),
 ):
-    all_anomalies = generate_anomalies_from_predictions()
+    """
+    Return detected network anomalies.
+
+    CHANGED: internally calls generate_anomalies_from_gnn() instead of
+             generate_anomalies_from_predictions().
+             The route path, query parameters, and AnomaliesResponse schema
+             are all unchanged so the dashboard frontend requires zero changes.
+    """
+    # CHANGED: migrated from old anomaly model to gnn_training_notebook
+    all_anomalies = generate_anomalies_from_gnn()
     filtered = filter_anomalies(all_anomalies, search, severity)
     return AnomaliesResponse(anomalies=filtered, total=len(filtered))
