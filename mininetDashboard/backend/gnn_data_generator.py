@@ -18,6 +18,7 @@ from .labeling import apply_predictive_labels, apply_scenario_labels
 from .scenarios import Scenario, ScenarioPhase, build_scenario_library
 from .services_heavy import (
     kill_iperf_clients,
+    reset_port_allocations,
     run_iperf_tcp,
     run_iperf_udp,
     start_iperf_servers,
@@ -117,9 +118,13 @@ class GNNDataGenerator:
             # Get topology info and node names
             host_names = [h.name for h in net.hosts]
 
-            # Start iperf3 servers
+            # Start iperf3 servers on all destination hosts
             self._update_status(current_scenario="setup", current_phase="starting_services")
-            start_iperf_servers(net)
+            started = start_iperf_servers(net)
+            logger.info(f"iperf3 servers started: {started}")
+
+            # Give servers time to bind ports before clients connect
+            time.sleep(2)
 
             # Ensure basic services (HTTP media, service hub)
             self._ensure_baseline_services(net)
@@ -213,6 +218,9 @@ class GNNDataGenerator:
         collector = TelemetryCollector(net, window_seconds)
         collector.start()
 
+        # Reset port allocations for each new scenario
+        reset_port_allocations()
+
         phase_timeline = []
         scenario_start = time.time()
 
@@ -275,7 +283,7 @@ class GNNDataGenerator:
                     net, action["src"], action["dst"],
                     bandwidth=action.get("bw", "2M"),
                     duration=action.get("duration", 10),
-                    port=action.get("port", 5201),
+                    port=action.get("port"),  # None = auto-allocate unique port
                 )
 
             elif atype == "iperf_tcp":
@@ -283,7 +291,7 @@ class GNNDataGenerator:
                     net, action["src"], action["dst"],
                     bandwidth=action.get("bw", "10M"),
                     duration=action.get("duration", 10),
-                    port=action.get("port", 5201),
+                    port=action.get("port"),  # None = auto-allocate unique port
                 )
 
             elif atype == "netem":
@@ -304,6 +312,7 @@ class GNNDataGenerator:
                     net, action["profile"],
                     action["src"], action["dst"],
                     action.get("intensity", 1.0),
+                    phase_duration=phase.duration_s,
                 )
 
     def _cleanup_phase(self, net, phase: ScenarioPhase):
@@ -346,50 +355,71 @@ class GNNDataGenerator:
             pass
 
     def _execute_attack(self, net, profile: str, src: str, dst: str,
-                        intensity: float):
-        """Execute an attack profile (reuses lab.py patterns)."""
+                        intensity: float, phase_duration: int = 240):
+        """Execute an attack profile with SUSTAINED traffic.
+
+        Traffic runs for the full phase duration so every telemetry window
+        within the phase captures the attack signature.
+
+        Bandwidth levels are calibrated to be DISTINGUISHABLE from NORMAL
+        router forwarding traffic (~2-30M bytes/window):
+          - PortScan:    150-600K  (low BW, high pkt count)
+          - BruteForce:  600K-1.5M (moderate BW, many connections)
+          - Infiltration: 2-5M TCP + 500K-1M UDP (mixed protocol)
+        """
         try:
             src_host = net.get(src)
             dst_ip = net.get(dst).IP()
         except Exception:
             return
 
-        burst = lambda n: max(1, int(n * intensity))
+        bw_scale = max(0.3, intensity)
+        dur = phase_duration + 10  # slightly longer than phase to avoid gaps
 
         if profile == "PortScan_slow":
-            ports = [22, 80, 443]
-            for p in ports:
-                src_host.cmd(f"nc -z -w1 {dst_ip} {p} >/dev/null 2>&1 &")
-                time.sleep(0.5)
+            # Slow scan: low bandwidth + many tiny SYN probes
+            bw = f"{int(150 * bw_scale)}K"
+            run_iperf_tcp(net, src, dst, bandwidth=bw, duration=dur)
+            src_host.cmd(
+                f"bash -lc 'while true; do for p in 22 80 443 8080; do "
+                f"nc -z -w1 {dst_ip} $p 2>/dev/null; done; sleep 0.2; done' &"
+            )
 
         elif profile == "PortScan":
-            ports = [21, 22, 23, 53, 80, 443, 8080, 3306, 3389]
-            pl = " ".join(str(p) for p in ports)
+            # Aggressive scan: moderate bandwidth + rapid port sweep
+            bw = f"{int(500 * bw_scale)}K"
+            run_iperf_tcp(net, src, dst, bandwidth=bw, duration=dur)
             src_host.cmd(
-                f"bash -lc 'for p in {pl}; do nc -z -w1 {dst_ip} $p >/dev/null 2>&1; done' &"
+                f"bash -lc 'while true; do for p in 21 22 23 25 53 80 110 143 443 993 995 "
+                f"3306 3389 5432 5900 6379 8080 8443 9200 27017; do "
+                f"nc -z -w1 {dst_ip} $p 2>/dev/null; done; sleep 0.1; done' &"
             )
 
         elif profile == "SSH-Patator":
+            # Brute force SSH: moderate sustained TCP (many auth attempts)
+            # Kept BELOW normal router traffic (~2.9M) to avoid confusion
+            bw = f"{int(800 * bw_scale)}K"
+            run_iperf_tcp(net, src, dst, bandwidth=bw, duration=dur)
             src_host.cmd(
-                f"bash -lc 'for i in $(seq 1 {burst(30)}); do "
-                f"nc -z -w1 {dst_ip} 22 >/dev/null 2>&1; done' &"
+                f"bash -lc 'while true; do for i in $(seq 1 20); do "
+                f"nc -z -w1 {dst_ip} 22 2>/dev/null; done; sleep 0.3; done' &"
             )
 
         elif profile == "FTP-Patator":
+            # Brute force FTP: similar but on port 21
+            bw = f"{int(600 * bw_scale)}K"
+            run_iperf_tcp(net, src, dst, bandwidth=bw, duration=dur)
             src_host.cmd(
-                f"bash -lc 'for i in $(seq 1 {burst(30)}); do "
-                f"nc -z -w1 {dst_ip} 21 >/dev/null 2>&1; done' &"
+                f"bash -lc 'while true; do for i in $(seq 1 15); do "
+                f"nc -z -w1 {dst_ip} 21 2>/dev/null; done; sleep 0.3; done' &"
             )
 
         elif profile == "Infiltration":
-            src_host.cmd(
-                f"bash -lc 'for i in $(seq 1 {burst(15)}); do "
-                f"nc -z -w1 {dst_ip} 22 >/dev/null 2>&1; done' &"
-            )
-            src_host.cmd(
-                f"bash -lc 'for i in $(seq 1 {burst(60)}); do "
-                f"echo dns_tunnel_$i | nc -u -w1 {dst_ip} 53 >/dev/null 2>&1; done' &"
-            )
+            # Lateral movement: TCP exfiltration + UDP DNS tunneling
+            bw_tcp = f"{int(2000 * bw_scale)}K"
+            bw_udp = f"{int(500 * bw_scale)}K"
+            run_iperf_tcp(net, src, dst, bandwidth=bw_tcp, duration=dur)
+            run_iperf_udp(net, src, dst, bandwidth=bw_udp, duration=dur)
 
     @staticmethod
     def _apply_netem(net, node_name: str, delay_ms=0, jitter_ms=0,

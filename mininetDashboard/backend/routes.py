@@ -6,6 +6,8 @@ from .dashboard_bridge import (
     build_alerts,
     build_anomalies,
     build_current_metrics,
+    build_gnn_alerts,
+    build_gnn_anomalies,
     build_historical_traffic,
     build_predictions,
     build_protocol_distribution_from_inference,
@@ -15,6 +17,7 @@ from .dashboard_bridge import (
     model_metrics_payload,
 )
 from .gnn_data_generator import gnn_generator
+from .gnn_inference import gnn_engine
 import os
 from pathlib import Path
 from .lab import lab_pipeline
@@ -137,6 +140,36 @@ def register_routes(app):
                 if d.is_dir():
                     datasets.append(d.name)
         return jsonify({"datasets": sorted(datasets, reverse=True)})
+
+    # GNN Live Inference Endpoints
+    @app.route("/api/gnn/inference/start", methods=["POST"])
+    def gnn_inference_start():
+        net = manager.net
+        if net is None:
+            return jsonify({"error": "Mininet is not running"}), 503
+        try:
+            result = gnn_engine.start(net)
+            if "error" in result:
+                return jsonify(result), 400
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/gnn/inference/stop", methods=["POST"])
+    def gnn_inference_stop():
+        return jsonify(gnn_engine.stop())
+
+    @app.route("/api/gnn/inference/status")
+    def gnn_inference_status():
+        return jsonify(gnn_engine.status())
+
+    @app.route("/api/gnn/inference/predictions")
+    def gnn_inference_predictions():
+        return jsonify(gnn_engine.predictions())
+
+    @app.route("/api/gnn/inference/anomaly_history")
+    def gnn_inference_anomaly_history():
+        return jsonify(gnn_engine.anomaly_history())
 
 
     # Dataset generation controls: packet capture, synthetic traffic, and feature export.
@@ -341,19 +374,20 @@ def register_routes(app):
 
     @app.route("/alerts")
     def alerts():
-        alerts_payload = build_alerts(lab_pipeline)
+        alerts_payload = build_alerts(lab_pipeline) + build_gnn_alerts()
         return jsonify({"alerts": alerts_payload})
 
     @app.route("/alerts/stats")
     def alerts_stats():
-        alerts_payload = build_alerts(lab_pipeline)
+        alerts_payload = build_alerts(lab_pipeline) + build_gnn_alerts()
         return jsonify(build_alert_stats(alerts_payload))
 
     @app.route("/anomalies")
     def anomalies():
         search = request.args.get("search")
         severity = request.args.get("severity")
-        result = filter_anomalies(build_anomalies(lab_pipeline), search=search, severity=severity)
+        combined = build_anomalies(lab_pipeline) + build_gnn_anomalies()
+        result = filter_anomalies(combined, search=search, severity=severity)
         return jsonify({"anomalies": result, "total": len(result)})
 
     @app.route("/predictions")
@@ -367,3 +401,101 @@ def register_routes(app):
     @app.route("/predictions/model/info")
     def predictions_model_info():
         return jsonify(model_info_payload())
+
+    @app.route("/api/simulation/status")
+    def simulation_combined_status():
+        pipeline_status = lab_pipeline.realtime_status()
+        normal_status = lab_pipeline.normal_sim_status()
+        gnn_status = gnn_engine.status()
+        gnn_preds = gnn_engine.predictions()
+        return jsonify({
+            "pipeline": pipeline_status,
+            "normal": normal_status,
+            "gnn": {
+                "status": gnn_status,
+                "predictions": gnn_preds if "error" not in gnn_preds else None,
+            },
+        })
+
+    @app.route("/api/simulation/normal/start", methods=["POST"])
+    def simulation_normal_start():
+        net = manager.net
+        if net is None:
+            return jsonify({"error": "Mininet is still starting"}), 503
+        try:
+            result = lab_pipeline.start_normal_simulation(net)
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/simulation/normal/stop", methods=["POST"])
+    def simulation_normal_stop():
+        result = lab_pipeline.stop_normal_simulation()
+        return jsonify(result)
+
+    @app.route("/api/simulation/inject", methods=["POST"])
+    def simulation_inject():
+        payload = request.get_json(silent=True) or {}
+        anomaly_type = payload.get("type", "")
+        node = payload.get("node") or None
+        duration_s = int(payload.get("duration_s", 30))
+        try:
+            result = lab_pipeline.inject_anomaly(anomaly_type, node=node, duration_s=duration_s)
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/simulation/anomaly_types")
+    def simulation_anomaly_types():
+        return jsonify(lab_pipeline.ANOMALY_TYPES)
+
+    @app.route("/api/storage/info")
+    def storage_info():
+        """Return paths and file counts for all stored data."""
+        import glob as _glob
+        base = Path(__file__).resolve().parents[2]
+        caps = base / "captures"
+
+        def count(pattern):
+            return len(_glob.glob(str(pattern)))
+
+        def latest(pattern):
+            files = sorted(_glob.glob(str(pattern)))
+            return str(Path(files[-1]).name) if files else None
+
+        gnn_inf = caps / "gnn_inference"
+        return jsonify({
+            "base_dir": str(base),
+            "captures": {
+                "path": str(caps),
+                "pcap_files": count(caps / "*.pcap"),
+                "latest_pcap": latest(caps / "*.pcap"),
+            },
+            "intelligence_out": {
+                "path": str(caps / "intelligence_out"),
+                "inference_files": count(caps / "intelligence_out" / "*_inference.json"),
+                "latest_inference": latest(caps / "intelligence_out" / "*_inference.json"),
+                "csv_files": count(caps / "intelligence_out" / "*.csv"),
+            },
+            "gnn_inference": {
+                "path": str(gnn_inf),
+                "anomaly_files": count(gnn_inf / "*_anomaly.json"),
+                "latest_anomaly": latest(gnn_inf / "*_anomaly.json"),
+                "has_latest": (gnn_inf / "latest_inference.json").exists(),
+            },
+            "gnn_datasets": {
+                "path": str(caps / "gnn_datasets"),
+                "dataset_count": count(caps / "gnn_datasets" / "gnn_*"),
+                "latest_dataset": latest(caps / "gnn_datasets" / "gnn_*"),
+            },
+            "ml_models": {
+                "path": str(base / "ml_training"),
+                "best_model": str(base / "ml_training" / "best_model.pt"),
+                "gnn_model": str(base / "ml_training" / "gnn_model_complete.pt"),
+                "backend_model": str(base / "mininetDashboard" / "backend" / "models"),
+            },
+            "collector_inbox": {
+                "path": str(caps / "collector_inbox"),
+                "pending_files": count(caps / "collector_inbox" / "*"),
+            },
+        })

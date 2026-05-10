@@ -4,12 +4,15 @@ Samples per-node and per-link metrics at fixed intervals to build
 graph snapshots suitable for temporal GNN prediction models.
 """
 
+import logging
 import re
 import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -144,13 +147,47 @@ def safe_cmd(node, cmd_str: str) -> str:
     """
     try:
         proc = node.popen(cmd_str, shell=True)
-        stdout, _ = proc.communicate()
-        return stdout.decode('utf-8', errors='ignore')
-    except Exception:
+        stdout, stderr = proc.communicate(timeout=5)
+        result = stdout.decode('utf-8', errors='ignore')
+        if not result.strip() and stderr:
+            err = stderr.decode('utf-8', errors='ignore').strip()
+            if err:
+                logger.debug(f"safe_cmd '{cmd_str}' on {node.name}: stderr={err}")
+        return result
+    except Exception as e:
+        logger.debug(f"safe_cmd '{cmd_str}' on {node.name}: exception={e}")
         return ""
 
+
+def _read_sys_stat(node, intf: str, stat_name: str) -> int:
+    """Read a single interface statistic from /sys/class/net/.
+    This is the most reliable fallback for Mininet network namespaces.
+    """
+    try:
+        raw = safe_cmd(node, f"cat /sys/class/net/{intf}/statistics/{stat_name} 2>/dev/null")
+        return int(raw.strip()) if raw.strip() else 0
+    except (ValueError, Exception):
+        return 0
+
+
+def _read_interface_counters_sysfs(node, intf: str) -> Tuple[int, int, int, int, int, int]:
+    """Read interface counters via /sys/class/net/ files.
+    Returns (rx_bytes, rx_pkts, rx_drops, tx_bytes, tx_pkts, tx_drops).
+    """
+    rx_bytes = _read_sys_stat(node, intf, "rx_bytes")
+    rx_pkts = _read_sys_stat(node, intf, "rx_packets")
+    rx_drops = _read_sys_stat(node, intf, "rx_dropped")
+    tx_bytes = _read_sys_stat(node, intf, "tx_bytes")
+    tx_pkts = _read_sys_stat(node, intf, "tx_packets")
+    tx_drops = _read_sys_stat(node, intf, "tx_dropped")
+    return rx_bytes, rx_pkts, rx_drops, tx_bytes, tx_pkts, tx_drops
+
+
+# Regex for ip -s link show — two-line format:
+#   RX: bytes  packets  errors  dropped overrun mcast
+#       12345  678      0       0       0       0
 _RX_TX_RE = re.compile(
-    r"(RX|TX):\s+bytes\s+(\d+)\s+.*?packets\s+(\d+)\s+.*?dropped\s+(\d+)",
+    r"(RX|TX):\s+bytes\s+packets\s+errors\s+dropped.*?\n\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)",
     re.DOTALL,
 )
 
@@ -174,11 +211,11 @@ def _parse_link_stats(output: str) -> Tuple[int, int, int, int, int, int]:
         if direction == "RX":
             rx_bytes = int(match.group(2))
             rx_pkts = int(match.group(3))
-            rx_drops = int(match.group(4))
+            rx_drops = int(match.group(5))  # dropped is column 4 (index 5)
         else:
             tx_bytes = int(match.group(2))
             tx_pkts = int(match.group(3))
-            tx_drops = int(match.group(4))
+            tx_drops = int(match.group(5))
     return rx_bytes, rx_pkts, rx_drops, tx_bytes, tx_pkts, tx_drops
 
 
@@ -344,10 +381,14 @@ class TelemetryCollector:
             window_index=self._window_index,
         )
 
-        # Collect node metrics
-        for name in self._host_names:
-            node_snap = self._collect_node_metrics(name)
-            snap.node_snapshots[name] = node_snap
+        from concurrent.futures import ThreadPoolExecutor
+        
+        # Collect node metrics in parallel
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(self._collect_node_metrics, name): name for name in self._host_names}
+            for future in futures:
+                node_snap = future.result()
+                snap.node_snapshots[node_snap.name] = node_snap
 
         # Collect edge metrics (derived from endpoint interface counters)
         for src, dst in self._edges:
@@ -373,18 +414,42 @@ class TelemetryCollector:
         )
 
         # --- Interface counters (delta) ---
+        # Read counters from ALL interfaces on this node, not just eth0
         try:
-            raw = safe_cmd(node, f"ip -s link show {intf} 2>/dev/null")
-            rx_b, rx_p, rx_d, tx_b, tx_p, tx_d = _parse_link_stats(raw)
-            prev = self._prev_counters.get(name, (0, 0, 0, 0, 0, 0))
-            ns.bytes_recv = max(0, rx_b - prev[0])
-            ns.pkts_recv = max(0, rx_p - prev[1])
-            ns.bytes_sent = max(0, tx_b - prev[3])
-            ns.pkts_sent = max(0, tx_p - prev[4])
-            ns.pkt_drops = max(0, (rx_d + tx_d) - (prev[2] + prev[5]))
-            self._prev_counters[name] = (rx_b, rx_p, rx_d, tx_b, tx_p, tx_d)
-        except Exception:
-            pass
+            # List all interfaces for this node
+            intf_list_raw = safe_cmd(node, "ls /sys/class/net/ 2>/dev/null")
+            intfs = [i.strip() for i in intf_list_raw.split() if i.strip() and i.strip() != "lo"]
+            if not intfs:
+                intfs = [intf]  # fallback to {name}-eth0
+            
+            total_rx_b = total_rx_p = total_rx_d = 0
+            total_tx_b = total_tx_p = total_tx_d = 0
+            
+            for iface in intfs:
+                # Try sysfs first (most reliable), then ip -s link show
+                irx_b, irx_p, irx_d, itx_b, itx_p, itx_d = _read_interface_counters_sysfs(node, iface)
+                if irx_b == 0 and itx_b == 0:
+                    raw = safe_cmd(node, f"ip -s link show {iface} 2>/dev/null")
+                    irx_b, irx_p, irx_d, itx_b, itx_p, itx_d = _parse_link_stats(raw)
+                total_rx_b += irx_b
+                total_rx_p += irx_p
+                total_rx_d += irx_d
+                total_tx_b += itx_b
+                total_tx_p += itx_p
+                total_tx_d += itx_d
+            
+            prev = self._prev_counters.get(name)
+            if prev is None:
+                prev = (total_rx_b, total_rx_p, total_rx_d, total_tx_b, total_tx_p, total_tx_d)
+
+            ns.bytes_recv = max(0, total_rx_b - prev[0])
+            ns.pkts_recv = max(0, total_rx_p - prev[1])
+            ns.bytes_sent = max(0, total_tx_b - prev[3])
+            ns.pkts_sent = max(0, total_tx_p - prev[4])
+            ns.pkt_drops = max(0, (total_rx_d + total_tx_d) - (prev[2] + prev[5]))
+            self._prev_counters[name] = (total_rx_b, total_rx_p, total_rx_d, total_tx_b, total_tx_p, total_tx_d)
+        except Exception as e:
+            logger.debug(f"Interface counter error for {name}: {e}")
 
         # --- Qdisc / netem state ---
         try:
@@ -402,8 +467,13 @@ class TelemetryCollector:
         try:
             ss_raw = safe_cmd(node, "ss -s 2>/dev/null")
             ns.tcp_connections = _parse_tcp_connections(ss_raw)
-        except Exception:
-            pass
+            # Fallback: count ESTABLISHED lines from ss -t
+            if ns.tcp_connections == 0:
+                ss_t = safe_cmd(node, "ss -t state established 2>/dev/null")
+                lines = [l for l in ss_t.strip().splitlines() if l.strip() and not l.startswith('State')]
+                ns.tcp_connections = len(lines)
+        except Exception as e:
+            logger.debug(f"TCP connection error for {name}: {e}")
 
         # --- Latency probe (ping gateway, fast) ---
         gw = self._node_gateways.get(name)
@@ -443,9 +513,32 @@ class TelemetryCollector:
             try:
                 node = net.get(name)
                 intf = f"{name}-eth0"
-                raw = safe_cmd(node, f"ip -s link show {intf} 2>/dev/null")
-                counters = _parse_link_stats(raw)
+                
+                # Read counters from ALL interfaces (consistent with _collect_node_metrics)
+                intf_list_raw = safe_cmd(node, "ls /sys/class/net/ 2>/dev/null")
+                intfs = [i.strip() for i in intf_list_raw.split() if i.strip() and i.strip() != "lo"]
+                if not intfs:
+                    intfs = [intf]
+                
+                total_rx_b = total_rx_p = total_rx_d = 0
+                total_tx_b = total_tx_p = total_tx_d = 0
+                
+                for iface in intfs:
+                    irx_b, irx_p, irx_d, itx_b, itx_p, itx_d = _read_interface_counters_sysfs(node, iface)
+                    if irx_b == 0 and itx_b == 0:
+                        raw = safe_cmd(node, f"ip -s link show {iface} 2>/dev/null")
+                        irx_b, irx_p, irx_d, itx_b, itx_p, itx_d = _parse_link_stats(raw)
+                    total_rx_b += irx_b
+                    total_rx_p += irx_p
+                    total_rx_d += irx_d
+                    total_tx_b += itx_b
+                    total_tx_p += itx_p
+                    total_tx_d += itx_d
+                
+                counters = (total_rx_b, total_rx_p, total_rx_d, total_tx_b, total_tx_p, total_tx_d)
                 self._prev_counters[name] = counters
+                if counters[0] > 0 or counters[3] > 0:
+                    logger.info(f"Initial counters for {name}: rx_bytes={counters[0]}, tx_bytes={counters[3]}, intfs={intfs}")
             except Exception:
                 self._prev_counters[name] = (0, 0, 0, 0, 0, 0)
 

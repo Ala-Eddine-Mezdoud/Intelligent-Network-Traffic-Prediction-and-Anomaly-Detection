@@ -33,11 +33,20 @@ class NetworkManager:
     def _start_net(self):
         # Clean stale interfaces/namespaces from earlier runs.
         os.system("mn -c")
+        
+        # Start Ryu SDN controller in the background.
+        # We use simple_switch_13 for basic L2 switching and ofctl_rest for API access.
+        os.system("pkill -f ryu-manager")
+        os.system("nohup ryu-manager ryu.app.simple_switch_13 ryu.app.ofctl_rest > /tmp/ryu.log 2>&1 &")
+        
+        # Wait a moment for controller to bind to 6653
+        import time
+        time.sleep(3)
 
         topo = RealWorldTopo()
         net = Mininet(
             topo=topo,
-            controller=lambda name: RemoteController(name, ip=MININET_CONTROLLER_IP),
+            controller=lambda name: RemoteController(name, ip=MININET_CONTROLLER_IP, port=6653),
             host=partial(Host, privateDirs=["/etc"]),
             # Ryu app simple_switch_13 requires OpenFlow 1.3 datapaths.
             switch=partial(OVSSwitch, protocols="OpenFlow13"),
