@@ -9,9 +9,13 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+import logging
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 from .intelligence import intelligence_plane
+from .gnn_inference import gnn_engine
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -44,40 +48,48 @@ class LabPipeline:
         self._last_training_run = None
         self._last_training_error = None
         self._active_operational_anomalies = []
+        self._net = None  # stored on start so inject_anomaly can use it
+        self._normal_sim_thread = None
+        self._normal_sim_stop = threading.Event()
         self._realtime_settings = {
-            "attack_interval_min_seconds": 60,
-            "attack_interval_max_seconds": 300,
-            "attack_intensity": 1.0,
+            "attack_interval_min_seconds": 300,
+            "attack_interval_max_seconds": 900,
+            "attack_intensity": 1.5,
             "protocol_mix_weights": {
-                "browser": 80,
-                "streaming_http": 85,
-                "rtsp_streaming": 70,
-                "bulk_download": 75,
-                "bulk_upload": 65,
-                "api_microservices": 70,
-                "dns": 65,
-                "dhcp": 40,
-                "quic_udp": 60,
-                "mqtt_telemetry": 55,
-                "voip": 45,
-                "ftp": 35,
-                "ssh": 45,
-                "database_replication": 40,
-                "icmp": 35,
-                "igmp": 25,
+                "browser": 95,
+                "streaming_http": 90,
+                "rtsp_streaming": 85,
+                "bulk_download": 90,
+                "bulk_upload": 85,
+                "api_microservices": 90,
+                "dns": 95,
+                "dhcp": 60,
+                "quic_udp": 80,
+                "mqtt_telemetry": 85,
+                "voip": 80,
+                "ftp": 70,
+                "ssh": 75,
+                "database_replication": 70,
+                "icmp": 65,
+                "igmp": 50,
             },
             "operational_anomaly_weights": {
-                "congestion": 75,
-                "latency_spike": 70,
-                "packet_loss": 55,
-                "jitter": 60,
-                "bandwidth_throttle": 65,
-                "brownout": 35,
+                "congestion": 35,
+                "latency_spike": 30,
+                "packet_loss": 25,
+                "jitter": 20,
+                "bandwidth_throttle": 15,
+                "brownout": 10,
             },
         }
         self._next_attack_epoch = None
         self._next_attack_profile = None
         self._last_attack = None
+        # Separate epoch for scheduled operational anomalies (netem-based)
+        # in full simulation — much rarer than protocol mix traffic.
+        self._next_operational_epoch: float = 0.0
+        self._op_anomaly_rotation_idx: int = 0
+        self._attack_rotation_idx: int = 0
         self._attack_profiles = [
             "PortScan",
             "DDoS",
@@ -124,6 +136,7 @@ class LabPipeline:
 
     def realtime_status(self):
         with self._lock:
+            gnn_status = gnn_engine.status()
             return {
                 "running": bool(self._realtime_thread and self._realtime_thread.is_alive()),
                 "interval_seconds": self._realtime_interval_seconds,
@@ -137,6 +150,12 @@ class LabPipeline:
                 "next_attack_profile": self._next_attack_profile,
                 "next_attack_in_seconds": self._seconds_to_next_attack(),
                 "last_attack": self._last_attack,
+                "gnn_inference": {
+                    "running": gnn_status.get("running", False),
+                    "predictions_made": gnn_status.get("predictions_made", 0),
+                    "window_state": gnn_status.get("window_state"),
+                    "anomaly_count": gnn_status.get("anomaly_count", 0),
+                },
             }
 
     def get_realtime_settings(self):
@@ -214,6 +233,299 @@ class LabPipeline:
         if self._next_attack_epoch is None or self._next_attack_profile is None:
             self._schedule_next_attack()
 
+    # ------------------------------------------------------------------
+    # Normal simulation mode — steady baseline traffic, no auto-attacks
+    # ------------------------------------------------------------------
+
+    def start_normal_simulation(self, net):
+        """Start steady-state normal traffic matching GNN training conditions."""
+        with self._lock:
+            if self._normal_sim_thread and self._normal_sim_thread.is_alive():
+                raise RuntimeError("Normal simulation already running")
+            if self._realtime_thread and self._realtime_thread.is_alive():
+                raise RuntimeError("Stop realtime simulation first")
+            self._net = net
+            self._normal_sim_stop.clear()
+            thread = threading.Thread(
+                target=self._normal_sim_worker,
+                args=(net,),
+                daemon=True,
+            )
+            self._normal_sim_thread = thread
+            thread.start()
+
+        if gnn_engine._loaded and not gnn_engine._running:
+            try:
+                gnn_engine.start(net)
+            except Exception:
+                pass
+
+        return {"started": True, "mode": "normal", "gnn_inference": gnn_engine._running}
+
+    def stop_normal_simulation(self):
+        self._normal_sim_stop.set()
+        if gnn_engine._running:
+            try:
+                gnn_engine.stop()
+            except Exception:
+                pass
+        with self._lock:
+            thread = self._normal_sim_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=5)
+        self._net = None
+        return {"stopped": True}
+
+    def normal_sim_status(self):
+        return {
+            "running": bool(self._normal_sim_thread and self._normal_sim_thread.is_alive()),
+            "mode": "normal",
+            "active_operational_anomalies": list(self._active_operational_anomalies),
+        }
+
+    def _normal_sim_worker(self, net):
+        # Each iperf3 server handles ONE client at a time. When we tried to
+        # restart clients before the old ones finished, the server rejected the
+        # new connection and we got a 40-second zero-traffic window.
+        #
+        # Fix: each source host runs a persistent bash loop that restarts
+        # iperf3 immediately after each run finishes (1-second gap maximum).
+        # This keeps traffic continuous regardless of flow duration.
+        #
+        # Flows: (src, dst, bandwidth_str, proto, server_port)
+        FLOWS = [
+            # DC-web receives from 6 sources → 6 server instances (ports 5201-5206)
+            ("e1_pc1", "dc_web",     "3M",   "tcp", 5201),
+            ("e1_erp", "dc_web",     "5M",   "tcp", 5202),
+            ("e2_pc1", "dc_web",     "3M",   "tcp", 5203),
+            ("h1_pc",  "dc_web",     "2M",   "tcp", 5204),
+            ("h2_pc",  "dc_web",     "2M",   "tcp", 5205),
+            ("h2_nas", "dc_web",     "3M",   "tcp", 5206),
+            # DC-monitor receives from 6 sources → ports 5211-5216
+            ("e1_pc2", "dc_monitor", "2M",   "tcp", 5211),
+            ("e2_pc2", "dc_monitor", "2M",   "tcp", 5212),
+            ("e2_crm", "dc_monitor", "4M",   "tcp", 5213),
+            ("h1_tv",  "dc_monitor", "2M",   "udp", 5214),
+            ("h2_cam", "dc_monitor", "1M",   "udp", 5215),
+            ("h1_iot", "dc_monitor", "1M",   "udp", 5216),
+            # Additional DC services for broader node coverage
+            ("e1_pc1", "dc_vpn",     "1M",   "tcp", 5221),
+            ("e2_pc1", "dc_pub_dns", "500K", "udp", 5222),
+        ]
+        FLOW_DURATION = 35  # each iperf3 run; loop restarts immediately after
+
+        # Collect unique (dst, port) pairs for server startup
+        dst_ports: dict = {}
+        for _, dst, _, _, port in FLOWS:
+            dst_ports.setdefault(dst, [])
+            if port not in dst_ports[dst]:
+                dst_ports[dst].append(port)
+
+        # Kill old iperf3 servers on target hosts before starting fresh ones.
+        # Do NOT call _ensure_http_media_service — its pkill kills all iperf3.
+        for dst_name in dst_ports:
+            try:
+                net.get(dst_name).cmd("pkill -f 'iperf3 -s' >/dev/null 2>&1 || true")
+            except Exception:
+                pass
+
+        time.sleep(1)
+
+        for dst_name, ports in dst_ports.items():
+            try:
+                h = net.get(dst_name)
+                for port in ports:
+                    h.cmd(
+                        f"nohup iperf3 -s -p {port} "
+                        f"--logfile /tmp/iperf3_{dst_name}_{port}.log >/dev/null 2>&1 &"
+                    )
+                    time.sleep(0.05)
+                logger.info(f"Normal sim: started iperf3 servers on {dst_name}: {ports}")
+            except Exception as exc:
+                logger.warning(f"iperf3 server start error on {dst_name}: {exc}")
+
+        time.sleep(2)  # let servers bind before first client connects
+
+        # Launch a self-restarting client loop on every source host.
+        # The loop exits only when iperf3 itself is killed (on simulation stop).
+        for src, dst, bw, proto, port in FLOWS:
+            try:
+                src_host = net.get(src)
+                dst_ip   = net.get(dst).IP()
+                udp_flag = "-u" if proto == "udp" else ""
+                # The bash loop restarts iperf3 immediately after each run,
+                # giving at most a 1-second gap between consecutive flows.
+                src_host.cmd(
+                    f"nohup bash -c '"
+                    f"while true; do "
+                    f"iperf3 -c {dst_ip} {udp_flag} -b {bw} -t {FLOW_DURATION} -p {port} "
+                    f">/tmp/iperf3_c_{src}_{port}.log 2>&1 || true; "
+                    f"sleep 0.5; "
+                    f"done' >/dev/null 2>&1 &"
+                )
+            except Exception as exc:
+                logger.debug(f"Normal sim flow error {src}->{dst}:{port}: {exc}")
+
+        logger.info("Normal sim: all persistent client loops started")
+
+        try:
+            # Main loop — just maintains anomaly state while flows run autonomously
+            while not self._normal_sim_stop.is_set():
+                with self._lock:
+                    self._prune_expired_operational_anomalies(net)
+                self._normal_sim_stop.wait(10)
+        finally:
+            self._clear_operational_anomalies(net)
+            # Kill all iperf3 processes on source and destination hosts.
+            # The bash loops will also die once iperf3 is gone.
+            all_hosts = set(src for src, *_ in FLOWS) | set(dst_ports.keys())
+            for host_name in all_hosts:
+                try:
+                    net.get(host_name).cmd("pkill -9 -f 'iperf3' >/dev/null 2>&1 || true")
+                except Exception:
+                    pass
+            with self._lock:
+                self._active_operational_anomalies = []
+
+    # ------------------------------------------------------------------
+    # Manual anomaly injection (works in both normal and realtime mode)
+    # ------------------------------------------------------------------
+
+    ANOMALY_TYPES = {
+        "congestion": {
+            "description": "Rate-limit a node to simulate link saturation",
+            "default_nodes": ["e1_pc1", "e2_pc1", "h2_nas"],
+        },
+        "latency": {
+            "description": "Add high latency to simulate WAN degradation",
+            "default_nodes": ["h1_pc", "e2_pc1", "dc_monitor"],
+        },
+        "packet_loss": {
+            "description": "Inject random packet drops",
+            "default_nodes": ["dc_web", "dc_monitor", "h2_pc"],
+        },
+        "jitter": {
+            "description": "Add variable delay to simulate unstable link",
+            "default_nodes": ["h1_tv", "h2_cam", "h1_iot"],
+        },
+        "brownout": {
+            "description": "Combined degradation — rate limit + high latency + some loss",
+            "default_nodes": ["dc_web", "dc_monitor", "h1_pc"],
+        },
+        "ddos": {
+            "description": "Flood dc_web with high-bandwidth UDP traffic",
+            "default_nodes": ["dc_web"],
+        },
+        "portscan": {
+            "description": "Rapid port scan from IoT device toward datacenter",
+            "default_nodes": ["dc_web", "dc_vpn"],
+        },
+        "brute_force": {
+            "description": "SSH brute-force attempts toward datacenter VPN",
+            "default_nodes": ["dc_vpn"],
+        },
+    }
+
+    def inject_anomaly(self, anomaly_type: str, node: str = None, duration_s: int = 30):
+        """Inject a specific anomaly immediately into the running network."""
+        net = self._net
+        if net is None:
+            raise RuntimeError("No simulation running — start normal or realtime simulation first")
+
+        if anomaly_type not in self.ANOMALY_TYPES:
+            raise RuntimeError(f"Unknown anomaly type '{anomaly_type}'. Valid: {list(self.ANOMALY_TYPES)}")
+
+        duration_s = max(10, min(300, int(duration_s)))
+
+        if anomaly_type == "congestion":
+            target = node or random.choice(self.ANOMALY_TYPES["congestion"]["default_nodes"])
+            self._inject_operational_anomaly(
+                net, target, "congestion",
+                delay_ms=60, jitter_ms=15, loss_pct=0.0, rate="4mbit",
+                duration_seconds=duration_s,
+            )
+            gnn_engine.set_active_injection("congestion", duration_s, target_nodes=[target])
+
+        elif anomaly_type == "latency":
+            target = node or random.choice(self.ANOMALY_TYPES["latency"]["default_nodes"])
+            self._inject_operational_anomaly(
+                net, target, "latency_spike",
+                delay_ms=300, jitter_ms=80, loss_pct=0.0, rate=None,
+                duration_seconds=duration_s,
+            )
+            gnn_engine.set_active_injection("latency", duration_s, target_nodes=[target])
+
+        elif anomaly_type == "packet_loss":
+            target = node or random.choice(self.ANOMALY_TYPES["packet_loss"]["default_nodes"])
+            self._inject_operational_anomaly(
+                net, target, "packet_loss",
+                delay_ms=15, jitter_ms=5, loss_pct=8.0, rate=None,
+                duration_seconds=duration_s,
+            )
+            gnn_engine.set_active_injection("packet_loss", duration_s, target_nodes=[target])
+
+        elif anomaly_type == "jitter":
+            target = node or random.choice(self.ANOMALY_TYPES["jitter"]["default_nodes"])
+            self._inject_operational_anomaly(
+                net, target, "jitter",
+                delay_ms=80, jitter_ms=60, loss_pct=0.0, rate="10mbit",
+                duration_seconds=duration_s,
+            )
+            gnn_engine.set_active_injection("jitter", duration_s, target_nodes=[target])
+
+        elif anomaly_type == "brownout":
+            target = node or random.choice(self.ANOMALY_TYPES["brownout"]["default_nodes"])
+            self._inject_operational_anomaly(
+                net, target, "brownout",
+                delay_ms=200, jitter_ms=80, loss_pct=5.0, rate="1mbit",
+                duration_seconds=duration_s,
+            )
+            gnn_engine.set_active_injection("brownout", duration_s, target_nodes=[target])
+
+        elif anomaly_type == "ddos":
+            # High-volume flood matching training DDOS scenario
+            from .services_heavy import run_iperf_udp
+            gnn_engine.set_active_injection(
+                "ddos", duration_s,
+                target_nodes=["h1_iot", "h2_cam", "e2_pc2", "dc_web"],
+            )
+            run_iperf_udp(net, "h1_iot",  "dc_web", bandwidth="20M", duration=duration_s)
+            run_iperf_udp(net, "h2_cam",  "dc_web", bandwidth="15M", duration=duration_s)
+            run_iperf_udp(net, "e2_pc2",  "dc_web", bandwidth="15M", duration=duration_s)
+            return {"injected": True, "type": anomaly_type, "target": "dc_web", "duration_s": duration_s}
+
+        elif anomaly_type == "portscan":
+            scan_target = node or "dc_web"
+            target_ip = net.get(scan_target).IP()
+            src = net.get("h1_iot")
+            src.cmd(
+                f"bash -c 'for i in $(seq 1 {duration_s * 2}); do "
+                f"for p in 21 22 23 25 53 80 110 443 3306 3389 5900 8080; do "
+                f"nc -z -w1 {target_ip} $p 2>/dev/null; done; sleep 0.5; done' &"
+            )
+            gnn_engine.set_active_injection(
+                "portscan", duration_s,
+                target_nodes=["h1_iot", scan_target],
+            )
+            return {"injected": True, "type": anomaly_type, "target": scan_target, "duration_s": duration_s}
+
+        elif anomaly_type == "brute_force":
+            bf_target = node or "dc_vpn"
+            target_ip = net.get(bf_target).IP()
+            src = net.get("h2_cam")
+            src.cmd(
+                f"bash -c 'for i in $(seq 1 {duration_s * 4}); do "
+                f"nc -z -w1 {target_ip} 22 2>/dev/null; sleep 0.25; done' &"
+            )
+            gnn_engine.set_active_injection(
+                "brute_force", duration_s,
+                target_nodes=["h2_cam", bf_target],
+            )
+            return {"injected": True, "type": anomaly_type, "target": bf_target, "duration_s": duration_s}
+
+        target = node or "unknown"
+        return {"injected": True, "type": anomaly_type, "target": target, "duration_s": duration_s}
+
     def start_realtime(self, net, interval_seconds=30):
         interval_seconds = int(interval_seconds)
         if interval_seconds < 10:
@@ -229,14 +541,20 @@ class LabPipeline:
         with self._lock:
             if self._realtime_thread and self._realtime_thread.is_alive():
                 raise RuntimeError("Realtime loop already running")
+            if self._normal_sim_thread and self._normal_sim_thread.is_alive():
+                raise RuntimeError("Stop normal simulation first")
             if self._capture_processes:
                 raise RuntimeError("Cannot start realtime loop while manual capture is running")
+            self._net = net
 
             self._ensure_realistic_services(net)
 
             self._realtime_interval_seconds = interval_seconds
             self._last_realtime_error = None
             self._schedule_next_attack()
+            self._next_operational_epoch = 0.0  # will be scheduled on first cycle
+            self._op_anomaly_rotation_idx = 0
+            self._attack_rotation_idx = 0
             self._realtime_stop.clear()
             thread = threading.Thread(
                 target=self._realtime_worker,
@@ -246,13 +564,30 @@ class LabPipeline:
             self._realtime_thread = thread
             thread.start()
 
+            # Auto-start GNN inference alongside realtime pipeline
+            if gnn_engine._loaded and not gnn_engine._running:
+                try:
+                    logger.info("Auto-starting GNN Inference Engine...")
+                    gnn_engine.start(net)
+                except Exception as gnn_exc:
+                    logger.error(f"Failed to auto-start GNN Engine: {gnn_exc}")
+                    pass  # GNN is optional — don't block realtime
+
         return {
             "started": True,
             "interval_seconds": interval_seconds,
+            "gnn_inference": gnn_engine._running,
         }
 
     def stop_realtime(self):
         self._realtime_stop.set()
+
+        # Stop GNN inference alongside realtime pipeline
+        if gnn_engine._running:
+            try:
+                gnn_engine.stop()
+            except Exception:
+                pass
 
         with self._lock:
             thread = self._realtime_thread
@@ -263,7 +598,8 @@ class LabPipeline:
         if self.status().get("capture_running"):
             self.stop_capture()
 
-        return {"stopped": True}
+        self._net = None
+        return {"stopped": True, "gnn_stopped": not gnn_engine._running}
 
     def start_capture(self, net, label="session"):
         if not self._command_exists("tcpdump"):
@@ -490,7 +826,7 @@ class LabPipeline:
 
         return result
 
-    def collector_extract_and_infer(self, capture_id):
+    def collector_extract_and_infer(self, capture_id, attack_hint=None):
         inbox_path = os.path.join(COLLECTOR_INBOX_DIR, capture_id)
         pcap_files = sorted(glob.glob(os.path.join(inbox_path, f"{capture_id}_*.pcap")))
         if not pcap_files:
@@ -517,7 +853,9 @@ class LabPipeline:
         except Exception:
             merged_path = None
 
-        inference = intelligence_plane.infer(flow_features, capture_id)
+        inference = intelligence_plane.infer(
+            flow_features, capture_id, attack_hint=attack_hint, window_seconds=30.0
+        )
         inference_report = {
             "capture_id": capture_id,
             "collector_csv": collector_csv,
@@ -697,7 +1035,62 @@ class LabPipeline:
 
         return {"merged_csv": out_path, "rows": len(annotated)}
 
+    def _start_realtime_baseline(self, net):
+        """Persistent iperf3 flows for full simulation baseline traffic.
+
+        Uses ports 5301-5308 (separate from the protocol-mix server on 5201)
+        so multiple concurrent clients don't compete for the same server slot.
+        Provides continuous non-zero traffic so the GNN never measures 0 Mbps
+        between protocol-mix cycles.
+        """
+        BASELINE_FLOWS = [
+            ("e1_pc1", "dc_web",     "4M",  "tcp", 5301),
+            ("e1_erp", "dc_web",     "6M",  "tcp", 5302),
+            ("e2_pc1", "dc_web",     "4M",  "tcp", 5303),
+            ("h1_pc",  "dc_web",     "3M",  "tcp", 5304),
+            ("e2_pc2", "dc_monitor", "3M",  "tcp", 5305),
+            ("e2_crm", "dc_monitor", "5M",  "tcp", 5306),
+            ("h1_tv",  "dc_monitor", "2M",  "udp", 5307),
+            ("h2_cam", "dc_monitor", "1M",  "udp", 5308),
+        ]
+        FLOW_DURATION = 30  # each iperf3 run; loop restarts immediately after
+
+        # Start a dedicated iperf3 server for each port
+        for dst_name, ports in [
+            ("dc_web",     [5301, 5302, 5303, 5304]),
+            ("dc_monitor", [5305, 5306, 5307, 5308]),
+        ]:
+            h = net.get(dst_name)
+            for port in ports:
+                h.cmd(
+                    f"nohup iperf3 -s -p {port} "
+                    f"--logfile /tmp/iperf3_rt_{dst_name}_{port}.log "
+                    f">/dev/null 2>&1 &"
+                )
+                time.sleep(0.05)
+
+        time.sleep(1)  # let servers bind before first client connects
+
+        for src, dst, bw, proto, port in BASELINE_FLOWS:
+            try:
+                src_host = net.get(src)
+                dst_ip   = net.get(dst).IP()
+                udp_flag = "-u" if proto == "udp" else ""
+                src_host.cmd(
+                    f"nohup bash -c '"
+                    f"while true; do "
+                    f"iperf3 -c {dst_ip} {udp_flag} -b {bw} -t {FLOW_DURATION} -p {port} "
+                    f">/tmp/iperf3_rt_c_{src}_{port}.log 2>&1 || true; "
+                    f"sleep 0.5; "
+                    f"done' >/dev/null 2>&1 &"
+                )
+            except Exception as exc:
+                logger.debug(f"Baseline flow error {src}→{dst}:{port}: {exc}")
+
+        logger.info("Full sim: baseline iperf3 flows started on ports 5301-5308")
+
     def _realtime_worker(self, net, interval_seconds):
+        self._start_realtime_baseline(net)
         while not self._realtime_stop.is_set():
             capture_id = None
             cycle_start = time.time()
@@ -708,11 +1101,20 @@ class LabPipeline:
 
                 while (time.time() - cycle_start) < interval_seconds and not self._realtime_stop.is_set():
                     self._run_realtime_traffic_cycle(net)
-                    time.sleep(2)
+                    time.sleep(1) # Reduced from 2s to 1s for more density
 
                 self.stop_capture()
                 self.relay_capture_to_collector(capture_id)
-                self.collector_extract_and_infer(capture_id)
+                
+                # Get current attack profile for better labeling
+                current_attack = self._next_attack_profile if (self._next_attack_epoch and time.time() >= self._next_attack_epoch) else None
+                if not current_attack and self._last_attack:
+                    # Check if last attack is still "fresh" (within last 60s)
+                    last_ts = datetime.fromisoformat(self._last_attack["timestamp"].replace("Z", ""))
+                    if (datetime.utcnow() - last_ts).total_seconds() < 60:
+                        current_attack = self._last_attack["name"]
+
+                self.collector_extract_and_infer(capture_id, attack_hint=current_attack)
 
                 with self._lock:
                     self._last_realtime_run = datetime.utcnow().isoformat() + "Z"
@@ -735,12 +1137,22 @@ class LabPipeline:
         net.get("dc_web").cmd("pkill -f 'python3 -m http.server 8080' >/dev/null 2>&1")
         net.get("dc_monitor").cmd("pkill -f 'python3 -m http.server 8080' >/dev/null 2>&1")
         net.get("dc_monitor").cmd("pkill -f 'tcp sink 9000' >/dev/null 2>&1")
+        # Kill all iperf3 processes (baseline loops + protocol-mix sessions)
+        for host_name in [
+            "e1_pc1", "e1_erp", "e2_pc1", "h1_pc",
+            "e2_pc2", "e2_crm", "h1_tv", "h2_cam",
+            "dc_web", "dc_monitor",
+        ]:
+            try:
+                net.get(host_name).cmd("pkill -9 -f 'iperf3' >/dev/null 2>&1 || true")
+            except Exception:
+                pass
         with self._lock:
             self._realistic_services_started = False
 
     def _run_realtime_traffic_cycle(self, net):
         self._run_protocol_mix_cycle(net)
-        self._run_operational_anomaly_cycle(net)
+        self._maybe_inject_operational_anomaly(net)
         self._maybe_run_scheduled_attack(net)
 
     def _capture_interfaces(self, net):
@@ -786,46 +1198,54 @@ class LabPipeline:
         self._run_real_world_mix_cycle(net)
 
     def _run_real_world_mix_cycle(self, net):
-        mix = self.get_realtime_settings().get("protocol_mix_weights", {})
+        try:
+            mix = self.get_realtime_settings().get("protocol_mix_weights", {})
+            self._ensure_realistic_services(net)
 
-        self._ensure_realistic_services(net)
+            # --- Browsing Traffic ---
+            if random.randint(1, 100) <= int(mix.get("browser", 75)):
+                srcs = ["e1_pc1", "h2_pc", "h1_pc", "e2_pc1"]
+                for src in random.sample(srcs, 2):
+                    self._run_http_get(net, src, "dc_web", port=8080, path="/")
 
-        if random.randint(1, 100) <= int(mix.get("browser", 75)):
-            self._run_http_get(net, "e1_pc1", "dc_web", port=8080, path="/")
-            self._run_http_get(net, "h2_pc", "dc_web", port=8080, path="/")
+            # --- Streaming Traffic ---
+            if random.randint(1, 100) <= int(mix.get("streaming_http", 80)):
+                srcs = ["h1_pc", "e2_pc2", "h1_tv"]
+                for src in random.sample(srcs, 1):
+                    self._run_streaming_download(net, src, "dc_web", path="/assets/stream.bin", port=8080)
 
-        if random.randint(1, 100) <= int(mix.get("streaming_http", 80)):
-            self._run_streaming_download(net, "h1_pc", "dc_web", path="/assets/stream.bin", port=8080)
-            self._run_streaming_download(net, "e2_pc2", "dc_web", path="/assets/stream.bin", port=8080)
+            # --- RTSP / IoT Traffic ---
+            if random.randint(1, 100) <= int(mix.get("rtsp_streaming", 70)):
+                self._run_rtsp_like_session(net, "h1_tv", "dc_monitor")
+                self._run_rtsp_like_session(net, "h2_cam", "dc_monitor")
 
-        if random.randint(1, 100) <= int(mix.get("rtsp_streaming", 70)):
-            self._run_rtsp_like_session(net, "h1_tv", "dc_monitor")
-            self._run_rtsp_like_session(net, "h2_cam", "dc_monitor")
+            # --- Bulk Transfers ---
+            if random.randint(1, 100) <= int(mix.get("bulk_download", 70)):
+                self._run_bulk_download(net, "e1_pc2", "dc_web", path="/assets/backup.bin", port=8080, rounds=1)
+                self._run_bulk_download(net, "h2_nas", "dc_web", path="/assets/backup.bin", port=8080, rounds=1)
 
-        if random.randint(1, 100) <= int(mix.get("bulk_download", 70)):
-            self._run_bulk_download(net, "e1_pc2", "dc_web", path="/assets/backup.bin", port=8080, rounds=2)
-            self._run_bulk_download(net, "h2_nas", "dc_web", path="/assets/backup.bin", port=8080, rounds=2)
+            # --- API / Microservices ---
+            if random.randint(1, 100) <= int(mix.get("api_microservices", 70)):
+                self._run_http_get(net, "e1_pc1", "dc_monitor", port=8080, path="/api/health")
 
-        if random.randint(1, 100) <= int(mix.get("bulk_upload", 60)):
-            self._run_bulk_upload(net, "h1_iot", "dc_monitor", port=9000, bytes_count=8_000_000)
-            self._run_bulk_upload(net, "h2_cam", "dc_monitor", port=9000, bytes_count=8_000_000)
+            # --- Heavy Background Traffic (iperf3) ---
+            if random.randint(1, 100) <= 85: # High probability for background load
+                self._run_iperf_session(net, "e1_pc1", "dc_web", bandwidth="5M", duration=8)
+                self._run_iperf_session(net, "h2_pc", "dc_monitor", bandwidth="3M", duration=8)
+                self._run_iperf_session(net, "e1_erp", "dc_web", bandwidth="15M", duration=12)
+                self._run_iperf_session(net, "e2_crm", "dc_monitor", bandwidth="12M", duration=12)
 
-        if random.randint(1, 100) <= int(mix.get("api_microservices", 70)):
-            self._run_http_get(net, "e1_pc1", "dc_monitor", port=8080, path="/api/health")
-            self._run_http_get(net, "h2_pc", "dc_monitor", port=8080, path="/api/health")
+            # --- DNS Traffic ---
+            if random.randint(1, 100) <= int(mix.get("dns", 80)):
+                self._run_udp_burst_port(net, "h1_pc", "dc_pub_dns", port=53, packets=15, payload_prefix="dns_query")
+                self._run_udp_burst_port(net, "e2_pc2", "dc_pub_dns", port=53, packets=15, payload_prefix="dns_query")
 
-        if random.randint(1, 100) <= int(mix.get("dns", 65)):
-            self._run_dns_like(net, "e1_pc2", "dc_pub_dns")
-            self._run_dns_like(net, "h1_pc", "dc_pub_dns")
-            self._run_dns_like(net, "h2_nas", "dc_pub_dns")
+        except Exception as e:
+            logger.error(f"Error in traffic mix cycle: {e}")
 
-        if random.randint(1, 100) <= int(mix.get("dhcp", 40)):
-            self._run_udp_burst_port(net, "e1_pc1", "e1_dhcp", port=67, packets=8, payload_prefix="dhcp_discover")
-            self._run_udp_burst_port(net, "e1_dhcp", "e1_pc1", port=68, packets=8, payload_prefix="dhcp_offer")
-
-        if random.randint(1, 100) <= int(mix.get("quic_udp", 60)):
-            self._run_udp_burst_port(net, "h2_nas", "dc_web", port=443, packets=25, payload_prefix="quic")
-            self._run_udp_burst_port(net, "e2_pc1", "dc_web", port=443, packets=25, payload_prefix="quic")
+        # --- Protocol Specific Bursts ---
+        if random.randint(1, 100) <= int(mix.get("quic_udp", 65)):
+            self._run_udp_burst_port(net, "e2_pc1", "dc_web", port=443, packets=30, payload_prefix="quic")
 
         if random.randint(1, 100) <= int(mix.get("mqtt_telemetry", 55)):
             self._run_udp_burst_port(net, "h1_iot", "dc_monitor", port=1883, packets=35, payload_prefix="mqtt")
@@ -854,83 +1274,98 @@ class LabPipeline:
         if random.randint(1, 100) <= int(mix.get("igmp", 25)):
             self._run_udp_burst_port(net, "h1_tv", "224.0.0.22", port=1900, packets=10, payload_prefix="igmp_like")
 
-    def _run_operational_anomaly_cycle(self, net):
-        settings = self.get_realtime_settings().get("operational_anomaly_weights", {})
+    def _schedule_next_operational_anomaly(self):
+        """Schedule the next automatic operational anomaly 3-8 minutes from now."""
+        interval = random.randint(180, 480)
+        self._next_operational_epoch = time.time() + interval
+        logger.info(f"Full sim: next operational anomaly in {interval}s")
 
+    def _maybe_inject_operational_anomaly(self, net):
+        """Inject a netem-based operational anomaly on a timed schedule (3-8 min apart).
+
+        Also prunes expired anomalies every call so netem state is always clean.
+        Called once per second from _run_realtime_traffic_cycle.
+        """
         with self._lock:
             self._prune_expired_operational_anomalies(net)
 
-        if random.randint(1, 100) <= int(settings.get("congestion", 75)):
-            self._inject_operational_anomaly(
-                net,
-                node_name=random.choice(["h2_nas", "h1_pc", "e1_erp", "e2_crm"]),
-                profile="congestion",
-                delay_ms=random.randint(35, 90),
-                jitter_ms=random.randint(5, 20),
-                loss_pct=0.0,
-                rate=random.choice(["5mbit", "8mbit", "12mbit"]),
-                duration_seconds=random.randint(8, 18),
-            )
+        # Initialize schedule on first call
+        if self._next_operational_epoch == 0.0:
+            self._schedule_next_operational_anomaly()
+            return
 
-        if random.randint(1, 100) <= int(settings.get("latency_spike", 70)):
-            self._inject_operational_anomaly(
-                net,
-                node_name=random.choice(["e1_pc1", "e2_pc1", "h1_iot", "h2_cam"]),
-                profile="latency_spike",
-                delay_ms=random.randint(120, 280),
-                jitter_ms=random.randint(20, 60),
-                loss_pct=0.0,
-                rate=None,
-                duration_seconds=random.randint(6, 14),
-            )
+        if time.time() < self._next_operational_epoch:
+            return
 
-        if random.randint(1, 100) <= int(settings.get("packet_loss", 55)):
-            self._inject_operational_anomaly(
-                net,
-                node_name=random.choice(["dc_web", "dc_monitor", "h2_nas", "e2_pc2"]),
-                profile="packet_loss",
-                delay_ms=random.randint(10, 35),
-                jitter_ms=random.randint(2, 10),
-                loss_pct=random.choice([1.0, 2.0, 4.0, 6.0]),
-                rate=None,
-                duration_seconds=random.randint(6, 16),
-            )
+        # Time to inject the next operational anomaly
+        rotation = [
+            "congestion", "latency_spike", "packet_loss",
+            "jitter", "bandwidth_throttle", "brownout",
+        ]
+        profile = rotation[self._op_anomaly_rotation_idx % len(rotation)]
+        self._op_anomaly_rotation_idx += 1
 
-        if random.randint(1, 100) <= int(settings.get("jitter", 60)):
-            self._inject_operational_anomaly(
-                net,
-                node_name=random.choice(["h1_tv", "h2_pc", "e1_pc2", "e2_pc2"]),
-                profile="jitter",
-                delay_ms=random.randint(40, 100),
-                jitter_ms=random.randint(15, 45),
-                loss_pct=0.0,
-                rate=random.choice(["10mbit", "15mbit"]),
-                duration_seconds=random.randint(8, 18),
-            )
+        duration = random.randint(45, 90)  # 45-90 second window — long enough for GNN to capture
+        target = None
 
-        if random.randint(1, 100) <= int(settings.get("bandwidth_throttle", 65)):
+        if profile == "congestion":
+            target = random.choice(["h2_nas", "h1_pc"])
             self._inject_operational_anomaly(
-                net,
-                node_name=random.choice(["e1_erp", "e2_crm", "h2_nas", "dc_web"]),
-                profile="bandwidth_throttle",
-                delay_ms=random.randint(10, 25),
-                jitter_ms=random.randint(1, 8),
-                loss_pct=0.0,
-                rate=random.choice(["2mbit", "3mbit", "4mbit"]),
-                duration_seconds=random.randint(10, 20),
+                net, target, "congestion",
+                delay_ms=75, jitter_ms=20, loss_pct=0.0, rate="5mbit",
+                duration_seconds=duration,
             )
+            gnn_engine.set_active_injection("congestion", duration, target_nodes=[target])
 
-        if random.randint(1, 100) <= int(settings.get("brownout", 35)):
+        elif profile == "latency_spike":
+            target = random.choice(["e1_pc1", "e2_pc1"])
             self._inject_operational_anomaly(
-                net,
-                node_name=random.choice(["dc_web", "dc_monitor", "h1_iot", "h2_cam"]),
-                profile="brownout",
-                delay_ms=random.randint(80, 160),
-                jitter_ms=random.randint(20, 50),
-                loss_pct=random.choice([1.0, 2.5, 5.0]),
-                rate=random.choice(["1mbit", "2mbit"]),
-                duration_seconds=random.randint(12, 24),
+                net, target, "latency_spike",
+                delay_ms=280, jitter_ms=60, loss_pct=0.0, rate=None,
+                duration_seconds=duration,
             )
+            gnn_engine.set_active_injection("latency", duration, target_nodes=[target])
+
+        elif profile == "packet_loss":
+            target = random.choice(["dc_web", "dc_monitor"])
+            self._inject_operational_anomaly(
+                net, target, "packet_loss",
+                delay_ms=20, jitter_ms=5, loss_pct=6.0, rate=None,
+                duration_seconds=duration,
+            )
+            gnn_engine.set_active_injection("packet_loss", duration, target_nodes=[target])
+
+        elif profile == "jitter":
+            target = random.choice(["h1_tv", "h2_pc"])
+            self._inject_operational_anomaly(
+                net, target, "jitter",
+                delay_ms=100, jitter_ms=45, loss_pct=0.0, rate="12mbit",
+                duration_seconds=duration,
+            )
+            gnn_engine.set_active_injection("jitter", duration, target_nodes=[target])
+
+        elif profile == "bandwidth_throttle":
+            target = random.choice(["e1_erp", "dc_web"])
+            self._inject_operational_anomaly(
+                net, target, "bandwidth_throttle",
+                delay_ms=25, jitter_ms=8, loss_pct=0.0, rate="2mbit",
+                duration_seconds=duration,
+            )
+            gnn_engine.set_active_injection("congestion", duration, target_nodes=[target])
+
+        elif profile == "brownout":
+            target = random.choice(["dc_web", "h1_iot"])
+            self._inject_operational_anomaly(
+                net, target, "brownout",
+                delay_ms=160, jitter_ms=50, loss_pct=4.0, rate="1mbit",
+                duration_seconds=duration,
+            )
+            gnn_engine.set_active_injection("brownout", duration, target_nodes=[target])
+
+        if target:
+            logger.info(f"Full sim: auto operational anomaly '{profile}' on {target} for {duration}s")
+
+        self._schedule_next_operational_anomaly()
 
     def _inject_operational_anomaly(self, net, node_name, profile, delay_ms, jitter_ms, loss_pct, rate, duration_seconds):
         start_ts = time.time()
@@ -1035,6 +1470,9 @@ class LabPipeline:
         )
         web_host.cmd("pkill -f 'python3 -m http.server 8080' >/dev/null 2>&1")
         web_host.cmd("cd /tmp/ai_sdn_web && nohup python3 -m http.server 8080 >/tmp/dc_web_http.log 2>&1 &")
+        # iperf3 server for bulk traffic generation (port 5201)
+        web_host.cmd("pkill -f 'iperf3 -s' >/dev/null 2>&1")
+        web_host.cmd("nohup iperf3 -s >/tmp/dc_web_iperf3.log 2>&1 &")
 
         monitor_host = net.get("dc_monitor")
         monitor_host.cmd("mkdir -p /tmp/ai_sdn_monitor")
@@ -1046,6 +1484,9 @@ class LabPipeline:
         )
         monitor_host.cmd("pkill -f 'python3 -m http.server 8080' >/dev/null 2>&1")
         monitor_host.cmd("cd /tmp/ai_sdn_monitor && nohup python3 -m http.server 8080 >/tmp/dc_monitor_http.log 2>&1 &")
+        # iperf3 server for bulk traffic generation (port 5201)
+        monitor_host.cmd("pkill -f 'iperf3 -s' >/dev/null 2>&1")
+        monitor_host.cmd("nohup iperf3 -s >/tmp/dc_monitor_iperf3.log 2>&1 &")
 
     def _ensure_service_hub(self, net):
         sink_host = net.get("dc_monitor")
@@ -1118,12 +1559,34 @@ class LabPipeline:
         if time.time() < self._next_attack_epoch:
             return
 
-        profile = self._next_attack_profile
+        profiles = [
+            "PortScan", "DDoS", "DoS Hulk", "DoS slowloris",
+            "FTP-Patator", "SSH-Patator", "Web Attack - SQL Injection", "Web Attack - XSS",
+        ]
+        profile = profiles[self._attack_rotation_idx % len(profiles)]
+        self._attack_rotation_idx += 1
+
         self._execute_attack_profile(net, profile)
+
+        # Tell GNN what attack is happening so it uses the correct label.
+        _ATTACK_TO_GNN = {
+            "PortScan":                   ("portscan",     ["h1_iot", "dc_web"]),
+            "DDoS":                       ("ddos",         ["h1_iot", "h2_cam", "e2_pc2", "dc_web"]),
+            "DoS Hulk":                   ("ddos",         ["h1_iot", "dc_web"]),
+            "DoS slowloris":              ("ddos",         ["h2_cam", "dc_web"]),
+            "FTP-Patator":                ("brute_force",  ["e2_pc2", "dc_monitor"]),
+            "SSH-Patator":                ("brute_force",  ["e2_pc2", "dc_vpn"]),
+            "Web Attack - SQL Injection": ("portscan",     ["h1_iot", "dc_web"]),
+            "Web Attack - XSS":           ("portscan",     ["h2_cam", "dc_web"]),
+        }
+        gnn_type, targets = _ATTACK_TO_GNN.get(profile, ("portscan", []))
+        gnn_engine.set_active_injection(gnn_type, duration_s=60, target_nodes=targets)
+
         self._last_attack = {
             "name": profile,
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
+        logger.info(f"Full sim: scheduled cyber attack '{profile}' → GNN label '{gnn_type}'")
         self._schedule_next_attack()
 
     def _execute_attack_profile(self, net, profile):
@@ -1131,28 +1594,30 @@ class LabPipeline:
         burst = lambda n: max(1, int(n * intensity))
 
         if profile == "PortScan":
-            self._run_port_scan(net, "h1_iot", "dc_web", ports=[21, 22, 23, 53, 80, 443, 8080, 3306, 3389])
+            self._run_port_scan(net, "h1_iot", "dc_web", ports=[21, 22, 23, 25, 53, 80, 443, 8080, 3306, 3389, 5900])
             return
 
         if profile == "DDoS":
-            self._run_udp_burst_port(net, "h1_iot", "dc_web", port=443, packets=burst(120), payload_prefix="ddos_quic")
-            self._run_udp_burst_port(net, "h2_cam", "dc_web", port=443, packets=burst(120), payload_prefix="ddos_quic")
+            # Use iperf3 for high-volume UDP flood
+            self._run_iperf_session(net, "h1_iot", "dc_web", bandwidth="40M", duration=12)
+            self._run_iperf_session(net, "h2_cam", "dc_web", bandwidth="40M", duration=12)
+            self._run_iperf_session(net, "e2_pc2", "dc_web", bandwidth="40M", duration=12)
             return
 
         if profile == "DoS Hulk":
-            self._run_http_flood(net, "h1_iot", "dc_web", port=8080, requests=burst(80))
+            self._run_http_flood(net, "h1_iot", "dc_web", port=8080, requests=burst(150))
             return
 
         if profile == "DoS slowloris":
-            self._run_slow_http_like(net, "h2_cam", "dc_web", port=8080, sockets=burst(24))
+            self._run_slow_http_like(net, "h2_cam", "dc_web", port=8080, sockets=burst(48))
             return
 
         if profile == "FTP-Patator":
-            self._run_tcp_connect_burst(net, "h1_iot", "dc_monitor", port=21, attempts=burst(40))
+            self._run_tcp_connect_burst(net, "h1_iot", "dc_monitor", port=21, attempts=burst(80))
             return
 
         if profile == "SSH-Patator":
-            self._run_tcp_connect_burst(net, "h2_cam", "dc_vpn", port=22, attempts=burst(40))
+            self._run_tcp_connect_burst(net, "h2_cam", "dc_vpn", port=22, attempts=burst(80))
             return
 
         if profile == "Web Attack - SQL Injection":
@@ -1199,6 +1664,13 @@ class LabPipeline:
         src.cmd(
             f"bash -c 'for i in $(seq 1 {bursts}); do ping -c 1 -W 1 {dst_ip} >/dev/null 2>&1; done'"
         )
+
+    @staticmethod
+    def _run_iperf_session(net, src_name, dst_name, bandwidth="10M", duration=5):
+        src = net.get(src_name)
+        dst_ip = net.get(dst_name).IP()
+        # Run iperf3 client in non-blocking mode
+        src.cmd(f"iperf3 -c {dst_ip} -b {bandwidth} -t {duration} >/dev/null 2>&1 &")
 
     @staticmethod
     def _run_http_get(net, src_name, dst_name, port=8080, path="/"):

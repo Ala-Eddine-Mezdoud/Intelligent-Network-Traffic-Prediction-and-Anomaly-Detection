@@ -9,6 +9,7 @@ import {
   Bell,
   Activity,
   Box,
+  Database,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { href: '/',                   label: 'Dashboard',         icon: Activity     },
   { href: '/simulation',         label: 'Simulation Lab',    icon: Box          },
+  { href: '/data-generation',    label: 'Data Generation',   icon: Database     },
   { href: '/traffic-prediction', label: 'Traffic Prediction',icon: TrendingUp   },
   { href: '/anomaly-detection',  label: 'Anomaly Detection', icon: AlertTriangle},
   { href: '/alerts',             label: 'Alerts',            icon: Bell         },

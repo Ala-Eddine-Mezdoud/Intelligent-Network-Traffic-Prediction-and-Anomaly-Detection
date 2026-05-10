@@ -155,6 +155,7 @@ export default function TrafficPrediction() {
                   fill="url(#colorUpper)"
                   stroke="none"
                   name="Confidence Interval"
+                  legendType="none"
                 />
                 <Line
                   type="monotone"
@@ -162,6 +163,7 @@ export default function TrafficPrediction() {
                   stroke="none"
                   fill="none"
                   dot={false}
+                  legendType="none"
                 />
                 <Line
                   type="monotone"

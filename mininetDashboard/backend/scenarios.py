@@ -28,11 +28,11 @@ def _baseline_actions() -> List[Dict[str, Any]]:
     return [{"type": "baseline_traffic"}]
 
 
-def _iperf_udp(src: str, dst: str, bw: str = "2M", duration: int = 10, port: int = 5201) -> Dict:
+def _iperf_udp(src: str, dst: str, bw: str = "2M", duration: int = 10, port: int = None) -> Dict:
     return {"type": "iperf_udp", "src": src, "dst": dst, "bw": bw, "duration": duration, "port": port}
 
 
-def _iperf_tcp(src: str, dst: str, bw: str = "10M", duration: int = 10, port: int = 5201) -> Dict:
+def _iperf_tcp(src: str, dst: str, bw: str = "10M", duration: int = 10, port: int = None) -> Dict:
     return {"type": "iperf_tcp", "src": src, "dst": dst, "bw": bw, "duration": duration, "port": port}
 
 
@@ -160,18 +160,18 @@ def _scenario_portscan_exploitation() -> Scenario:
         description="Reconnaissance scan followed by brute force exploitation",
         phases=[
             ScenarioPhase("NORMAL", 60, _baseline_actions()),
-            ScenarioPhase("PORTSCAN_RECON", 120,
+            ScenarioPhase("PORTSCAN_RECON", 180,
                           _baseline_actions() + [_attack("PortScan_slow", "h1_iot", "dc_web", 0.3)],
-                          ["dc_web"], {"h1_iot": "PORTSCAN_RECON", "dc_web": "PORTSCAN_RECON"}),
-            ScenarioPhase("PORTSCAN_RECON", 120,
+                          ["dc_web", "h1_iot"], {"h1_iot": "PORTSCAN_RECON", "dc_web": "PORTSCAN_RECON", "r_home1": "PORTSCAN_RECON"}),
+            ScenarioPhase("PORTSCAN_RECON", 180,
                           _baseline_actions() + [_attack("PortScan", "h1_iot", "dc_web", 0.8)],
-                          ["dc_web"], {"h1_iot": "PORTSCAN_RECON", "dc_web": "PORTSCAN_RECON"}),
-            ScenarioPhase("BRUTE_FORCE_PROBE", 120,
+                          ["dc_web", "h1_iot"], {"h1_iot": "PORTSCAN_RECON", "dc_web": "PORTSCAN_RECON", "r_home1": "PORTSCAN_RECON"}),
+            ScenarioPhase("BRUTE_FORCE_PROBE", 180,
                           _baseline_actions() + [_attack("SSH-Patator", "h1_iot", "dc_vpn", 0.5)],
-                          ["dc_vpn"], {"h1_iot": "BRUTE_FORCE_PROBE", "dc_vpn": "BRUTE_FORCE_PROBE"}),
+                          ["dc_vpn", "h1_iot"], {"h1_iot": "BRUTE_FORCE_PROBE", "dc_vpn": "BRUTE_FORCE_PROBE", "r_home1": "BRUTE_FORCE_PROBE"}),
             ScenarioPhase("BRUTE_FORCE_ACTIVE", 240,
                           _baseline_actions() + [_attack("SSH-Patator", "h1_iot", "dc_vpn", 1.5)],
-                          ["dc_vpn"], {"h1_iot": "BRUTE_FORCE_ACTIVE", "dc_vpn": "BRUTE_FORCE_ACTIVE"}),
+                          ["dc_vpn", "h1_iot"], {"h1_iot": "BRUTE_FORCE_ACTIVE", "dc_vpn": "BRUTE_FORCE_ACTIVE", "r_home1": "BRUTE_FORCE_ACTIVE"}),
             ScenarioPhase("RECOVERY", 30, _baseline_actions()),
             ScenarioPhase("NORMAL", 60, _baseline_actions()),
         ],
@@ -314,18 +314,25 @@ def _scenario_brute_force_escalation() -> Scenario:
         description="SSH brute force starts slow and accelerates",
         phases=[
             ScenarioPhase("NORMAL", 60, _baseline_actions()),
-            ScenarioPhase("BRUTE_FORCE_PROBE", 120,
+            ScenarioPhase("BRUTE_FORCE_PROBE", 180,
                           _baseline_actions() + [_attack("SSH-Patator", "h2_cam", "dc_vpn", 0.2)],
-                          ["dc_vpn"], {"h2_cam": "BRUTE_FORCE_PROBE", "dc_vpn": "BRUTE_FORCE_PROBE"}),
-            ScenarioPhase("BRUTE_FORCE_PROBE", 120,
+                          ["dc_vpn", "h2_cam"], {"h2_cam": "BRUTE_FORCE_PROBE", "dc_vpn": "BRUTE_FORCE_PROBE", "r_home2": "BRUTE_FORCE_PROBE"}),
+            ScenarioPhase("BRUTE_FORCE_PROBE", 180,
                           _baseline_actions() + [_attack("SSH-Patator", "h2_cam", "dc_vpn", 0.6)],
-                          ["dc_vpn"], {"h2_cam": "BRUTE_FORCE_PROBE", "dc_vpn": "BRUTE_FORCE_PROBE"}),
+                          ["dc_vpn", "h2_cam"], {"h2_cam": "BRUTE_FORCE_PROBE", "dc_vpn": "BRUTE_FORCE_PROBE", "r_home2": "BRUTE_FORCE_PROBE"}),
             ScenarioPhase("BRUTE_FORCE_ACTIVE", 240,
                           _baseline_actions() + [_attack("SSH-Patator", "h2_cam", "dc_vpn", 2.0), _attack("FTP-Patator", "h1_iot", "dc_monitor", 1.5)],
-                          ["dc_vpn", "dc_monitor"], {"h2_cam": "BRUTE_FORCE_ACTIVE", "dc_vpn": "BRUTE_FORCE_ACTIVE", "h1_iot": "BRUTE_FORCE_ACTIVE", "dc_monitor": "BRUTE_FORCE_ACTIVE"}),
-            ScenarioPhase("LATERAL_MOVEMENT", 120,
-                          _baseline_actions() + [_attack("Infiltration", "h2_cam", "dc_pub_dns", 1.0)],
-                          ["dc_pub_dns"], {"h2_cam": "LATERAL_MOVEMENT", "dc_pub_dns": "LATERAL_MOVEMENT"}),
+                          ["dc_vpn", "dc_monitor", "h2_cam", "h1_iot"],
+                          {"h2_cam": "BRUTE_FORCE_ACTIVE", "dc_vpn": "BRUTE_FORCE_ACTIVE",
+                           "h1_iot": "BRUTE_FORCE_ACTIVE", "dc_monitor": "BRUTE_FORCE_ACTIVE",
+                           "r_home2": "BRUTE_FORCE_ACTIVE", "r_home1": "BRUTE_FORCE_ACTIVE"}),
+            ScenarioPhase("LATERAL_MOVEMENT", 240,
+                          _baseline_actions() + [_attack("Infiltration", "h2_cam", "dc_pub_dns", 1.0),
+                                                  _attack("Infiltration", "h1_iot", "dc_monitor", 0.8)],
+                          ["dc_pub_dns", "dc_monitor", "h2_cam", "h1_iot"],
+                          {"h2_cam": "LATERAL_MOVEMENT", "dc_pub_dns": "LATERAL_MOVEMENT",
+                           "h1_iot": "LATERAL_MOVEMENT", "dc_monitor": "LATERAL_MOVEMENT",
+                           "r_home2": "LATERAL_MOVEMENT", "r_home1": "LATERAL_MOVEMENT"}),
             ScenarioPhase("RECOVERY", 30, _baseline_actions()),
             ScenarioPhase("NORMAL", 60, _baseline_actions()),
         ],

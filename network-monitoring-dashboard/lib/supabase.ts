@@ -13,8 +13,8 @@ if (!supabaseUrl || !supabaseKey) {
 
 // Create typed Supabase client
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
-  auth: { 
-    autoRefreshToken: true, 
+  auth: {
+    autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false
   },
