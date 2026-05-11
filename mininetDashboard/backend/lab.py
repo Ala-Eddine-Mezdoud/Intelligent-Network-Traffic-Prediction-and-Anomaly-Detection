@@ -368,11 +368,28 @@ class LabPipeline:
 
         logger.info("Normal sim: all persistent client loops started")
 
+        # Allow flows to ramp up before the first IDS snapshot
+        self._normal_sim_stop.wait(15)
+
+        last_ids_ts = 0.0
+        IDS_INTERVAL = 90  # seconds between lightweight pcap snapshots
+
         try:
-            # Main loop — just maintains anomaly state while flows run autonomously
+            # Main loop — prune anomaly state and run periodic IDS snapshots
             while not self._normal_sim_stop.is_set():
                 with self._lock:
-                    self._prune_expired_operational_anomalies(net)
+                    expired_nodes = self._prune_expired_operational_anomalies()
+                for _node_name in expired_nodes:
+                    self._clear_node_netem(net, _node_name)
+
+                now = time.time()
+                if now - last_ids_ts >= IDS_INTERVAL:
+                    try:
+                        self._run_normal_sim_ids_check(net)
+                    except Exception as exc:
+                        logger.debug("Normal sim IDS check error: %s", exc)
+                    last_ids_ts = time.time()
+
                 self._normal_sim_stop.wait(10)
         finally:
             self._clear_operational_anomalies(net)
@@ -1155,6 +1172,84 @@ class LabPipeline:
         self._maybe_inject_operational_anomaly(net)
         self._maybe_run_scheduled_attack(net)
 
+    def _run_normal_sim_ids_check(self, net):
+        """Run a short pcap capture and IDS inference during normal simulation.
+
+        This gives the IDS real flow-level features to analyse even when the
+        full pcap pipeline is not running.  The snapshot lasts IDS_CAP_SECS
+        seconds on two switch interfaces, then feeds the extracted flows to
+        intelligence_plane.infer() and stores the result as _last_inference so
+        the /anomalies endpoint can return flow-based IDS alerts.
+        """
+        IDS_CAP_SECS = 10
+
+        interfaces = self._capture_interfaces(net)[:2]  # two interfaces is enough
+        if not interfaces:
+            return
+
+        capture_id = f"normsim_ids_{int(time.time())}"
+        pcap_paths = []
+        procs = []
+
+        for intf in interfaces:
+            safe = intf.replace("/", "_")
+            path = os.path.join(CAPTURE_DIR, f"{capture_id}_{safe}.pcap")
+            proc = subprocess.Popen(
+                ["tcpdump", "-i", intf, "-n", "-s", "0", "-U", "-w", path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            procs.append(proc)
+            pcap_paths.append(path)
+
+        self._normal_sim_stop.wait(IDS_CAP_SECS)  # sleep without blocking stop event
+
+        for p in procs:
+            try:
+                p.terminate()
+                p.wait(timeout=3)
+            except Exception:
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+
+        rows = []
+        for path in pcap_paths:
+            try:
+                rows.extend(self._read_packets_with_tshark(path))
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
+        if not rows:
+            return
+
+        flow_features = self._build_flow_features(rows)
+        if not flow_features:
+            return
+
+        inference = intelligence_plane.infer(
+            flow_features,
+            capture_id,
+            window_seconds=float(IDS_CAP_SECS),
+        )
+        with self._lock:
+            self._last_inference = {
+                "capture_id": capture_id,
+                "collector_flow_count": len(flow_features),
+                "inference": inference,
+            }
+        logger.debug(
+            "Normal sim IDS check: %d flows, %d suspicious",
+            len(flow_features),
+            inference.get("suspicious_flows", 0),
+        )
+
     def _capture_interfaces(self, net):
         # Capture points are distribution/access switches instead of edge hosts.
         switch_names = ["isp_core", "ent1_sw", "ent2_sw", "home1_sw", "home2_sw", "dc_sw"]
@@ -1287,7 +1382,9 @@ class LabPipeline:
         Called once per second from _run_realtime_traffic_cycle.
         """
         with self._lock:
-            self._prune_expired_operational_anomalies(net)
+            expired_nodes = self._prune_expired_operational_anomalies()
+        for _node_name in expired_nodes:
+            self._clear_node_netem(net, _node_name)
 
         # Initialize schedule on first call
         if self._next_operational_epoch == 0.0:
@@ -1408,16 +1505,23 @@ class LabPipeline:
         for item in active:
             self._clear_node_netem(net, item.get("node"))
 
-    def _prune_expired_operational_anomalies(self, net):
+    def _prune_expired_operational_anomalies(self) -> list:
+        """Remove expired anomalies from the list and return their node names.
+
+        Does NOT perform any network operations so it is safe to call while
+        holding self._lock.  Callers must clear netem on returned nodes outside
+        the lock to avoid blocking status() and API routes.
+        """
         now = time.time()
         kept = []
+        expired_nodes = []
         for item in list(self._active_operational_anomalies):
             if item.get("expires_at", 0) > now:
                 kept.append(item)
-                continue
-            self._clear_node_netem(net, item.get("node"))
-
+            else:
+                expired_nodes.append(item.get("node"))
         self._active_operational_anomalies = kept
+        return expired_nodes
 
     @staticmethod
     def _primary_host_interface(node):
