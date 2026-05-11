@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Play, Square, RefreshCw, Database, Clock, Activity, FileJson } from 'lucide-react';
+import { DashboardLayout } from '@/components/dashboard-layout';
 import { startGnnCapture, stopGnnCapture, getGnnCaptureStatus, getGnnDatasets } from '@/lib/api';
 
 export default function DataGenerationPage() {
@@ -78,6 +79,7 @@ export default function DataGenerationPage() {
   };
 
   return (
+    <DashboardLayout>
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">GNN Data Generation</h1>
@@ -268,5 +270,6 @@ export default function DataGenerationPage() {
         </CardContent>
       </Card>
     </div>
+    </DashboardLayout>
   );
 }
