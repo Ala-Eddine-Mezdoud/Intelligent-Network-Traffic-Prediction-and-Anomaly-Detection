@@ -125,67 +125,74 @@ export default function TrafficPrediction() {
             <CardTitle>Historical & Predicted Traffic</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={450}>
-              <ComposedChart data={predictionData}>
-                <defs>
-                  <linearGradient id="colorUpper" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#67e8f9" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#67e8f9" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
-                <XAxis
-                  dataKey="time"
-                  stroke="#ffffff80"
-                  style={{ fontSize: '12px' }}
-                />
-                <YAxis stroke="#ffffff80" style={{ fontSize: '12px' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a1a2e',
-                    border: '1px solid #16213e',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: '#ffffff' }}
-                />
-                <Legend wrapperStyle={{ color: '#ffffff' }} />
-                <Area
-                  type="monotone"
-                  dataKey="upper"
-                  fill="url(#colorUpper)"
-                  stroke="none"
-                  name="Confidence Interval"
-                  legendType="none"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="lower"
-                  stroke="none"
-                  fill="none"
-                  dot={false}
-                  legendType="none"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="historical"
-                  stroke="#a78bfa"
-                  dot={{ fill: '#a78bfa', r: 4 }}
-                  activeDot={{ r: 6 }}
-                  strokeWidth={2.5}
-                  name="Historical Traffic"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#67e8f9"
-                  strokeDasharray="5 5"
-                  dot={{ fill: '#67e8f9', r: 4 }}
-                  activeDot={{ r: 6 }}
-                  strokeWidth={2.5}
-                  name="Predicted Traffic"
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            {predictionData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 gap-2">
+                <p className="text-muted-foreground text-lg font-medium">No simulation running</p>
+                <p className="text-muted-foreground text-sm">Start a simulation to see live traffic predictions</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={450}>
+                <ComposedChart data={predictionData}>
+                  <defs>
+                    <linearGradient id="colorUpper" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#67e8f9" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#67e8f9" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
+                  <XAxis
+                    dataKey="time"
+                    stroke="#ffffff80"
+                    style={{ fontSize: '12px' }}
+                  />
+                  <YAxis stroke="#ffffff80" style={{ fontSize: '12px' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1a1a2e',
+                      border: '1px solid #16213e',
+                      borderRadius: '8px',
+                    }}
+                    labelStyle={{ color: '#ffffff' }}
+                  />
+                  <Legend wrapperStyle={{ color: '#ffffff' }} />
+                  <Area
+                    type="monotone"
+                    dataKey="upper"
+                    fill="url(#colorUpper)"
+                    stroke="none"
+                    name="Confidence Interval"
+                    legendType="none"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="lower"
+                    stroke="none"
+                    fill="none"
+                    dot={false}
+                    legendType="none"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="historical"
+                    stroke="#a78bfa"
+                    dot={{ fill: '#a78bfa', r: 4 }}
+                    activeDot={{ r: 6 }}
+                    strokeWidth={2.5}
+                    name="Historical Traffic"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="predicted"
+                    stroke="#67e8f9"
+                    strokeDasharray="5 5"
+                    dot={{ fill: '#67e8f9', r: 4 }}
+                    activeDot={{ r: 6 }}
+                    strokeWidth={2.5}
+                    name="Predicted Traffic"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 

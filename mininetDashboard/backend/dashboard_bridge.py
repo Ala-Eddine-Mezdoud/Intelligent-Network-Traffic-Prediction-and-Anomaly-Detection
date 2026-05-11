@@ -64,38 +64,23 @@ def build_historical_traffic(hours=24):
 
 
 def build_predictions(hours=24, lab_pipeline=None):
-    # Priority 1: GNN traffic series (live 8-second model data)
+    # Only return data when the GNN inference loop is actively running.
+    # Stale _last_prediction from a previous simulation must not be shown.
+    if not gnn_engine.status().get("running", False):
+        return []
+
     gnn_preds = gnn_engine.predictions()
-    traffic_series = gnn_preds.get("traffic_series")
-    if isinstance(traffic_series, list) and len(traffic_series) > 3:
-        return traffic_series
+    if "error" in gnn_preds:
+        return []
 
-    # Priority 2: IDS model predictions from lab pipeline
-    if lab_pipeline is not None:
-        latest = _get_latest_inference(lab_pipeline)
-        inf = latest.get("inference") or {}
-        pred = inf.get("predictions")
-        if isinstance(pred, list) and pred:
-            return pred
-
-    # Fallback to 1-minute steps over 60 minutes
-    now = datetime.now()
-    data = []
-
-    for idx in range(60):
-        ts = now + timedelta(minutes=idx)
-        pred = 25.0 + random.uniform(-2, 5)
-        data.append(
-            {
-                "time": ts.strftime("%H:%M"),
-                "historical": round(25.0 + random.uniform(-4, 4), 1) if idx < 15 else None,
-                "predicted": round(pred, 1),
-                "upper": round(pred * 1.2, 1),
-                "lower": round(pred * 0.8, 1),
-            }
-        )
-
-    return data
+    # traffic_series already contains both historical (real GNN telemetry from
+    # 8-second windows) and future points (trend extrapolation from the same
+    # traffic scale).  Using forecasting_benign.pkl here would create a scale
+    # mismatch: the pkl model was trained on pcap-derived byte rates (~2-5 Mbps)
+    # while the GNN measures raw interface counters (100s of Mbps for Mininet
+    # TCP flows at wire speed).
+    traffic_series = gnn_preds.get("traffic_series") or []
+    return traffic_series if len(traffic_series) > 3 else []
 
 
 def build_protocol_distribution():

@@ -7,9 +7,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 import numpy as np
-
-# Compatibility shim for models pickled with numpy 2.x being loaded on numpy 1.x
 import sys
+
+# sklearn 0.22.x uses deprecated numpy type aliases removed in numpy 1.24+.
+# Restore them before any sklearn import so predict() does not raise AttributeError.
+np.float = float
+np.int = int
+np.complex = complex
+np.object = object
+np.bool = bool
+np.str = str
+
+# Shim for models pickled with numpy 2.x (numpy._core → numpy.core).
 try:
     import numpy.core as _core
     sys.modules["numpy._core"] = _core
@@ -97,18 +106,18 @@ class IntelligencePlane:
             self._model_error = "joblib/pandas unavailable; using heuristic inference"
             return
 
-        try:
-            # Models are known to cause Segfault on Python 3.8 due to structseq mismatch (trained on newer Python)
-            # We skip loading them to prevent the entire dashboard from crashing.
-            self._model_error = "Classical ML models disabled due to Python 3.8 incompatibility; using GNN engine + heuristic fallback"
-            logger.warning(self._model_error)
-            return
+        errors = []
 
-            # Original loading logic (kept for reference but unreachable)
-            if self._forecast_model_path.exists():
+        if self._forecast_model_path.exists():
+            try:
                 self._forecast_model = joblib.load(self._forecast_model_path)
+                logger.info("Loaded forecast model: %s", type(self._forecast_model).__name__)
+            except Exception as exc:
+                errors.append(f"forecast: {exc}")
+                logger.warning("Could not load forecast model: %s", exc)
 
-            if self._ids_model_path.exists():
+        if self._ids_model_path.exists():
+            try:
                 loaded = joblib.load(self._ids_model_path)
                 if isinstance(loaded, dict):
                     for key in ["model", "pipeline", "classifier", "estimator", "clf"]:
@@ -119,8 +128,15 @@ class IntelligencePlane:
                         self._ids_model = list(loaded.values())[0]
                 else:
                     self._ids_model = loaded
-        except Exception as exc:
-            self._model_error = str(exc)
+                logger.info("Loaded IDS model: %s", type(self._ids_model).__name__)
+            except Exception as exc:
+                errors.append(f"ids: {exc}")
+                logger.warning("Could not load IDS model: %s", exc)
+
+        if errors:
+            self._model_error = "; ".join(errors)
+        elif self._ids_model is None and self._forecast_model is None:
+            self._model_error = "No model files found; using heuristic inference"
 
     @staticmethod
     def _safe_float(value, default=0.0):
@@ -213,86 +229,81 @@ class IntelligencePlane:
         return pd.DataFrame(rows)
 
     def _predict_anomalies(self, flow_rows, attack_hint=None):
-        anomalies = []
-        suspicious_count = 0
+        """Classify flows using heuristics + ML model (when loaded).
 
-        if self._ids_model is not None and pd is not None and flow_rows:
-            features = self._build_ids_features(flow_rows)
-            predictions = self._ids_model.predict(features)
-            confidences = [0.85] * len(predictions)
+        Architecture: heuristics run ALWAYS; ML model acts as a supplementary
+        layer only when both (a) the model confidence is high and (b) the flow
+        does not land on a known-benign port range (iperf3 5200-5330).
 
-            if hasattr(self._ids_model, "predict_proba"):
-                probs = self._ids_model.predict_proba(features)
-                confidences = [float(np.max(row)) for row in probs]
-
-            for idx, (row, pred, conf) in enumerate(zip(flow_rows, predictions, confidences), start=1):
-                class_name = CLASS_NAMES.get(int(pred), "Unknown")
-                heuristic_suspicious = (
-                    str(row.get("Label", "")).strip() == "MALICIOUS_SIM"
-                    or self._safe_float(row.get("Flow Pkts/s")) > 5000.0
-                    or self._safe_float(row.get("Flow Byts/s")) > 5_000_000.0
-                )
-                model_suspicious = class_name != "BENIGN"
-
-                if model_suspicious or heuristic_suspicious:
-                    suspicious_count += 1
-                    severity = ATTACK_SEVERITY.get(class_name, "Medium")
-                    if heuristic_suspicious and class_name == "BENIGN":
-                        class_name = "IDS Detection: Malicious Flow Pattern"
-                        severity = "Medium"
-
-                    anomalies.append(
-                        {
-                            "id": f"n-{idx:03d}",
-                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "source_ip": str(row.get("Src IP", "0.0.0.0")),
-                            "dest_ip": str(row.get("Dst IP", "0.0.0.0")),
-                            "threat_type": class_name,
-                            "severity": severity,
-                            "status": "Ongoing" if conf > 0.9 else "Investigating",
-                            "confidence": round(float(conf), 4),
-                        }
-                    )
-
-            return suspicious_count, anomalies
-
+        This avoids the two failure modes seen in practice:
+          - ML model path used to short-circuit aggregate-DDoS detection.
+          - Low-confidence ML predictions misclassifying legitimate iperf3 flows.
+        """
         BRUTE_FORCE_PORTS = {21, 22, 23, 25, 3389}
         WEB_PORTS = {80, 443, 8080, 8443}
+        # iperf3 server ports used by the simulation — never attack targets
+        IPERF3_PORTS = set(range(5200, 5331))
 
-        # Pre-compute lookup structures for multi-flow detections
-        dst_ports_by_src: dict = {}           # src_ip → set of distinct dst ports
-        flows_to_service_port: dict = {}       # (src_ip, dst_port) → count
-        # Aggregate byte rate per destination for DDoS detection.
-        # Real DDoS uses multiple sources → individual flow rates may be moderate
-        # (15-20 Mbps), but the destination receives the combined flood (50-120 Mbps).
-        # Checking aggregate avoids flagging legitimate high-bandwidth single flows.
-        agg_byterate_to_dst: dict = {}         # dst_ip → total bytes/s from all sources
+        # ── pre-compute per-flow aggregates ────────────────────────────────
+        dst_ports_by_src: dict = {}
+        flows_to_service_port: dict = {}
+        agg_byterate_to_dst: dict = {}
 
         for row in flow_rows:
-            src = str(row.get("Src IP", ""))
-            dst = str(row.get("Dst IP", ""))
+            src      = str(row.get("Src IP", ""))
+            dst      = str(row.get("Dst IP", ""))
             dst_port = self._safe_int(row.get("Dst Port", 0))
-            byte_rate = self._safe_float(row.get("Flow Byts/s", 0.0))
+            br       = self._safe_float(row.get("Flow Byts/s", 0.0))
 
             if src and dst_port > 0:
                 dst_ports_by_src.setdefault(src, set()).add(dst_port)
                 if dst_port in BRUTE_FORCE_PORTS:
                     key = (src, dst_port)
                     flows_to_service_port[key] = flows_to_service_port.get(key, 0) + 1
-            if dst:
-                agg_byterate_to_dst[dst] = agg_byterate_to_dst.get(dst, 0.0) + byte_rate
+            # Exclude iperf3 simulation ports from the DDoS aggregate — TCP iperf3
+            # ignores the -b rate hint and saturates at wire speed, causing the
+            # aggregate to dwarf the detection threshold in normal simulation.
+            if dst and dst_port not in IPERF3_PORTS:
+                agg_byterate_to_dst[dst] = agg_byterate_to_dst.get(dst, 0.0) + br
 
-        # DDoS threshold: aggregate >= 5 MB/s (40 Mbps) at a single destination.
-        # Normal baseline to dc_web: ~17-37 Mbps (<5 MB/s).
-        # DDoS simulation (3 × 15-40 Mbps sources): 45-120 Mbps (>5 MB/s).
-        DDOS_AGG_THRESHOLD = 5_000_000.0  # bytes/s aggregate per destination
-        ddos_victims = {dst for dst, rate in agg_byterate_to_dst.items() if rate >= DDOS_AGG_THRESHOLD}
+        # DDoS threshold: aggregate byte-rate (excluding known-benign iperf3 ports)
+        # >= 50 MB/s = 400 Mbps at a single destination.
+        # Real DDoS in simulation uses hping3/scapy which generates thousands of
+        # tiny packets per second at non-iperf3 ports; the aggregate easily crosses
+        # this bar while normal iperf3 flows (all on ports 5201-5330) are excluded.
+        DDOS_AGG_THRESHOLD = 50_000_000.0
+        ddos_victims = {
+            dst for dst, rate in agg_byterate_to_dst.items()
+            if rate >= DDOS_AGG_THRESHOLD
+        }
+
+        # ── optional ML predictions (supplementary only) ───────────────────
+        ml_preds = None
+        ml_confs = None
+        if self._ids_model is not None and pd is not None and flow_rows:
+            try:
+                features = self._build_ids_features(flow_rows)
+                if features is not None:
+                    raw_preds = self._ids_model.predict(features)
+                    confs = [0.75] * len(raw_preds)
+                    if hasattr(self._ids_model, "predict_proba"):
+                        probs = self._ids_model.predict_proba(features)
+                        confs = [float(np.max(r)) for r in probs]
+                    ml_preds = raw_preds
+                    ml_confs = confs
+            except Exception as exc:
+                logger.debug("ML IDS prediction skipped: %s", exc)
+
+        # ── per-flow classification ────────────────────────────────────────
+        anomalies = []
+        suspicious_count = 0
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         for idx, row in enumerate(flow_rows, start=1):
             pkt_rate  = self._safe_float(row.get("Flow Pkts/s"))
             byte_rate = self._safe_float(row.get("Flow Byts/s"))
             dst_port  = self._safe_int(row.get("Dst Port", 0))
-            duration  = self._safe_float(row.get("Flow Duration", 1e9))
+            duration  = self._safe_float(row.get("Flow Duration", 0.0))
             src_ip    = str(row.get("Src IP", "0.0.0.0"))
             dst_ip    = str(row.get("Dst IP", "0.0.0.0"))
             label     = str(row.get("Label", "")).strip()
@@ -302,149 +313,180 @@ class IntelligencePlane:
             severity      = "Medium"
             confidence    = 0.75
 
-            if label == "MALICIOUS_SIM":
+            # P1: labelled attacker IP — only during active attack simulations.
+            # attack_hint is None during normal-sim IDS snapshots; in that context
+            # the reserved attacker hosts (h1_iot, h2_cam) run legitimate iperf3
+            # traffic and must NOT be flagged as malicious.
+            if label == "MALICIOUS_SIM" and attack_hint is not None:
                 is_suspicious = True
-                threat_type   = f"IDS: Simulated Attack ({attack_hint})" if attack_hint else "IDS: Simulated Attack"
-                severity      = "High"
-                confidence    = 0.90
+                threat_type   = f"IDS: Simulated Attack ({attack_hint})"
+                severity  = "High"
+                confidence = 0.90
 
-            # DDoS / DoS: aggregate flood at a single destination
-            elif dst_ip in ddos_victims:
+            # P2: aggregate multi-source DDoS flood (non-iperf3 ports only).
+            # Gate on per-flow rate > 1 MB/s (8 Mbps).  iperf3 test flows are
+            # already excluded from ddos_victims (they saturate at wire speed
+            # but are not attacks).
+            elif (dst_ip in ddos_victims and byte_rate > 1_000_000.0
+                  and dst_port not in IPERF3_PORTS):
                 is_suspicious = True
                 threat_type   = "IDS: DDoS/DoS — Multi-Source Flood"
                 severity      = "High"
                 confidence    = 0.88
 
-            # Single-source extreme rate (e.g. very large UDP blast, >40 Mbps per flow)
-            elif byte_rate > 5_000_000.0:
+            # P3: single-source extreme rate (>400 Mbps per flow, non-iperf3)
+            elif byte_rate > 50_000_000.0 and dst_port not in IPERF3_PORTS:
                 is_suspicious = True
                 threat_type   = "IDS: DDoS/DoS — High Volume"
                 severity      = "High"
                 confidence    = 0.85
 
-            # Tiny-packet flood (>5k pkt/s — amplification or reflection attacks)
+            # P4: tiny-packet flood (amplification / reflection)
             elif pkt_rate > 5000.0:
                 is_suspicious = True
                 threat_type   = "IDS: DDoS/DoS — High Packet Rate"
                 severity      = "High"
                 confidence    = 0.82
 
-            # PortScan: same source contacted 8+ distinct destination ports
+            # P5: port scan (8+ distinct dst ports from one source)
             elif len(dst_ports_by_src.get(src_ip, set())) >= 8:
                 is_suspicious = True
                 threat_type   = "IDS: Port Scan"
                 severity      = "Medium"
                 confidence    = 0.80
 
-            # Brute Force: 5+ flows from same source to SSH/FTP/RDP port
+            # P6: brute-force (5+ flows to auth port from same source)
             elif dst_port in BRUTE_FORCE_PORTS:
                 key = (src_ip, dst_port)
                 if flows_to_service_port.get(key, 0) >= 5:
                     is_suspicious = True
-                    port_name     = {21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 3389: "RDP"}.get(dst_port, str(dst_port))
+                    port_name     = {
+                        21: "FTP", 22: "SSH", 23: "Telnet",
+                        25: "SMTP", 3389: "RDP",
+                    }.get(dst_port, str(dst_port))
                     threat_type   = f"IDS: Brute Force ({port_name})"
                     severity      = "High"
                     confidence    = 0.82
 
-            # HTTP Flood: elevated packet rate to web port
+            # P7: HTTP flood (elevated rate to web port)
             elif dst_port in WEB_PORTS and pkt_rate > 200.0:
                 is_suspicious = True
                 threat_type   = "IDS: HTTP Flood"
                 severity      = "Medium"
                 confidence    = 0.75
 
-            # Slow DoS (Slowloris / Slowhttptest): long-lived low-bandwidth conn to web port
-            elif dst_port in WEB_PORTS and duration > 10_000_000 and byte_rate < 500.0:
+            # P8: Slowloris (long-lived, near-zero rate to web port)
+            elif dst_port in WEB_PORTS and duration > 10.0 and byte_rate < 500.0:
                 is_suspicious = True
                 threat_type   = "IDS: Slow DoS (Slowloris)"
                 severity      = "Medium"
                 confidence    = 0.70
 
+            # P9: ML model — supplementary, high-confidence only.
+            # Require 0.90 confidence globally; 0.97 for iperf3 ports to
+            # prevent misclassifying legitimate high-bandwidth test flows.
+            elif ml_preds is not None:
+                pred       = ml_preds[idx - 1]
+                conf       = ml_confs[idx - 1]
+                class_name = CLASS_NAMES.get(int(pred), "Unknown")
+                in_iperf3  = dst_port in IPERF3_PORTS
+                threshold  = 0.97 if in_iperf3 else 0.90
+
+                if class_name != "BENIGN" and conf >= threshold:
+                    is_suspicious = True
+                    threat_type   = class_name
+                    severity      = ATTACK_SEVERITY.get(class_name, "Medium")
+                    confidence    = conf
+
             if is_suspicious:
                 suspicious_count += 1
-                anomalies.append(
-                    {
-                        "id": f"n-{idx:03d}",
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "source_ip": src_ip,
-                        "dest_ip": dst_ip,
-                        "threat_type": threat_type,
-                        "severity": severity,
-                        "status": "Ongoing" if confidence >= 0.85 else "Investigating",
-                        "confidence": confidence,
-                    }
-                )
+                anomalies.append({
+                    "id": f"n-{idx:03d}",
+                    "timestamp": ts,
+                    "source_ip": src_ip,
+                    "dest_ip": dst_ip,
+                    "threat_type": threat_type,
+                    "severity": severity,
+                    "status": "Ongoing" if confidence >= 0.85 else "Investigating",
+                    "confidence": round(float(confidence), 4),
+                })
 
         return suspicious_count, anomalies
 
     def _build_predictions(self):
-        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        now = datetime.now()
         history_bytes = list(self._traffic_history_bytes)
 
+        # No data yet — return empty so the frontend shows nothing rather than
+        # fabricating random values that would mislead the user.
         if len(history_bytes) < 2:
-            # Fallback for empty state: 1-minute intervals over next 20 minutes
-            base = 25.0 # Reflect our new iperf baseline
-            return [
-                {
-                    "time": (now + timedelta(minutes=idx)).strftime("%H:%M"),
-                    "historical": base + random.uniform(-2, 2) if idx < 10 else None,
-                    "predicted": base + random.uniform(-1, 1),
-                    "upper": (base + 2) * 1.2,
-                    "lower": (base - 2) * 0.8,
-                }
-                for idx in range(20)
-            ]
+            return []
 
-        # Correct scaling: (bytes * 8 bits / 1M) / 30 seconds = Mbps
-        history_mbps = [(val * 8.0 / 1_000_000.0) / 30.0 for val in history_bytes]
+        # Each window in _traffic_history_bytes was appended once per infer() call.
+        # Calls arrive every ~30 s (full sim pcap cycle) or ~90 s (normal sim IDS
+        # snapshot), so we label each historical point at 30-second intervals back
+        # from "now" for a consistent x-axis regardless of the actual cadence.
+        WINDOW_S = 30
+        history_mbps = [(v * 8.0 / 1_000_000.0) / WINDOW_S for v in history_bytes]
 
         if self._forecast_model is not None and len(history_bytes) >= 12:
-            # Predict next 12 windows (6 minutes total) using 1-minute steps
-            past_values = list(history_mbps[-12:])
-            predictions_mbps = []
-            
-            # Simple linear extrapolation for now if model is not fully trained on live data
-            last_val = past_values[-1]
-            trend = (past_values[-1] - past_values[0]) / len(past_values)
-            
+            past_bytes = list(self._traffic_history_bytes)[-12:]
+            past_mbps  = history_mbps[-12:]
+
             result = []
-            # Add historical
-            for i, val in enumerate(past_values):
+            n = len(past_mbps)
+            for i, val in enumerate(past_mbps):
+                offset_s = (n - i) * WINDOW_S
                 result.append({
-                    "time": (now - timedelta(minutes=len(past_values)-i)).strftime("%H:%M"),
+                    "time": (now - timedelta(seconds=offset_s)).strftime("%H:%M:%S"),
                     "historical": round(val, 2),
                     "predicted": None,
                 })
-            
-            # Add forecast
+
+            # Autoregressive forecast: feed model its own predictions back
+            window = list(past_bytes)
             for i in range(1, 13):
-                pred = max(5.0, last_val + (trend * i) + random.uniform(-1, 1))
+                try:
+                    X_pred   = np.array(window[-12:], dtype=np.float64).reshape(1, -1)
+                    nb       = float(self._forecast_model.predict(X_pred)[0])
+                    next_bytes = max(nb, 0.0)
+                except Exception:
+                    next_bytes = window[-1]
+                next_mbps = max(0.5, (next_bytes * 8.0 / 1_000_000.0) / WINDOW_S)
                 result.append({
-                    "time": (now + timedelta(minutes=i)).strftime("%H:%M"),
+                    "time": (now + timedelta(seconds=i * WINDOW_S)).strftime("%H:%M:%S"),
                     "historical": None,
-                    "predicted": round(pred, 2),
-                    "upper": round(pred * 1.15, 2),
-                    "lower": round(pred * 0.85, 2),
+                    "predicted": round(next_mbps, 2),
+                    "upper":     round(next_mbps * 1.15, 2),
+                    "lower":     round(next_mbps * 0.85, 2),
                 })
-            return result
+                window.append(next_bytes)
             return result
 
+        # Fallback: model not loaded or fewer than 12 history windows.
+        # Show what history we have, plus a short trend projection (next 6 steps).
         recent = history_mbps[-6:] if len(history_mbps) >= 6 else history_mbps
-        avg = statistics.mean(recent)
-        trend = (recent[-1] - recent[0]) / max(len(recent) - 1, 1)
+        avg    = statistics.mean(recent)
+        trend  = (recent[-1] - recent[0]) / max(len(recent) - 1, 1)
 
         result = []
-        for idx in range(24):
-            pred = max(1.0, avg + trend * (idx + 1))
-            result.append(
-                {
-                    "time": (now + timedelta(hours=idx)).strftime("%H:%M"),
-                    "historical": round(history_mbps[-12 + idx], 1) if idx < 12 and len(history_mbps) >= 12 else None,
-                    "predicted": round(pred, 1),
-                    "upper": round(pred * 1.12, 1),
-                    "lower": round(pred * 0.88, 1),
-                }
-            )
+        n = len(history_mbps)
+        for i, val in enumerate(history_mbps):
+            offset_s = (n - i) * WINDOW_S
+            result.append({
+                "time": (now - timedelta(seconds=offset_s)).strftime("%H:%M:%S"),
+                "historical": round(val, 1),
+                "predicted": None,
+            })
+        for idx in range(1, 7):
+            pred = max(0.5, avg + trend * idx)
+            result.append({
+                "time": (now + timedelta(seconds=idx * WINDOW_S)).strftime("%H:%M:%S"),
+                "historical": None,
+                "predicted": round(pred, 1),
+                "upper": round(pred * 1.12, 1),
+                "lower": round(pred * 0.88, 1),
+            })
         return result
 
     def infer(self, flow_rows, capture_id, attack_hint=None, window_seconds=30.0):

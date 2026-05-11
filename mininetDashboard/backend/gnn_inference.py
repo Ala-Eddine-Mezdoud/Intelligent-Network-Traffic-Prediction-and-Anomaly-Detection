@@ -657,15 +657,16 @@ class GNNInferenceEngine:
 
                 anomaly_nodes = new_anomaly_nodes
 
-            elif window_label in ("SCANNING", "BRUTE_FORCE") and not active_label:
-                # No override active: SCANNING and BRUTE_FORCE are false positives
-                # caused by the tcp_connections distribution mismatch between training
-                # and live simulation (14 persistent iperf3 flows push tcp_connections
-                # 14σ above training mean; SSH/FTP protocol-mix bursts trigger BRUTE_FORCE).
+            elif window_label in ("SCANNING", "BRUTE_FORCE", "JITTER", "BANDWIDTH") and not active_label:
+                # No override active: these states are false positives in normal simulation.
+                # SCANNING/BRUTE_FORCE: tcp_connections 14σ above training mean (14 iperf3 flows).
+                # JITTER: Mininet TCP kernel timing variation mimics jitter patterns.
+                # BANDWIDTH: uncapped TCP iperf3 saturates at wire speed without tc limits.
+                # All require an active injection (netem or manual) to be credible.
                 window_label = "NORMAL"
                 anomaly_nodes = []
                 for name in per_node:
-                    if per_node[name]["predicted_state"] in ("SCANNING", "BRUTE_FORCE"):
+                    if per_node[name]["predicted_state"] in ("SCANNING", "BRUTE_FORCE", "JITTER", "BANDWIDTH"):
                         per_node[name]["predicted_state"] = "NORMAL"
                         per_node[name]["is_anomaly"] = False
             # ── End ground-truth override ──────────────────────────────────
