@@ -7,26 +7,45 @@ import { AlertNotification } from "./alert-notification";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  navbarStatus?: "healthy" | "warning";
+  navbarStatus?: "healthy" | "warning" | "critical";
+  breadcrumbs?: Array<{ label: string; href?: string }>;
+  onSearch?: (query: string) => void;
+  onFilter?: () => void;
 }
 
 export function DashboardLayout({
   children,
   navbarStatus = "healthy",
+  breadcrumbs = [{ label: "Dashboard" }],
+  onSearch,
+  onFilter,
 }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarCompact, setSidebarCompact] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-transparent">
+
       <SidebarNav
         open={sidebarOpen}
+        compact={sidebarCompact}
         onToggle={() => setSidebarOpen((p) => !p)}
+        onCompactToggle={() => setSidebarCompact((p) => !p)}
       />
-      <TopNavbar status={navbarStatus} />
+      <TopNavbar
+        status={navbarStatus}
+        breadcrumbs={breadcrumbs}
+        onSearch={onSearch}
+        onFilter={onFilter}
+        sidebarOpen={sidebarOpen}
+        sidebarCompact={sidebarCompact}
+      />
       <AlertNotification />
       <main
-        className="mt-16 p-4 md:p-6 space-y-8 transition-all duration-300"
-        style={{ marginLeft: sidebarOpen ? "16rem" : "0" }}
+        className="relative z-10 mt-16 p-4 md:p-6 space-y-8 transition-all duration-300"
+        style={{
+          marginLeft: sidebarOpen ? (sidebarCompact ? "5rem" : "18rem") : "0",
+        }}
       >
         {children}
       </main>

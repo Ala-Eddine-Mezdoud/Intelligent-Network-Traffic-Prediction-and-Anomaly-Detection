@@ -37,7 +37,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className="font-sans antialiased dark">
+      <body className="font-sans antialiased dark relative">
+        {/* Background Layer */}
+        <div
+          className="fixed inset-0 -z-50 bg-cover bg-center bg-no-repeat bg-fixed"
+          style={{
+            backgroundImage: "url('/assets/background.png')",
+            opacity: 0.35,
+          }}
+        />
+
+        {/* Optional: Dark overlay for better contrast */}
+        <div className="fixed inset-0 -z-40 bg-gradient-to-br from-black/40 via-black/20 to-black/40 pointer-events-none" />
+
         {children}
         <Toaster />
         <Analytics />

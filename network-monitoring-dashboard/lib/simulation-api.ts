@@ -21,7 +21,26 @@ export async function getTopology(): Promise<TopologyResponse> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.error || `Topology fetch failed (${res.status})`);
   }
-  return res.json();
+  const topologyData = await res.json();
+
+  // Add mock health status to nodes for demonstration
+  topologyData.nodes = topologyData.nodes.map((node: TopoNode) => ({
+    ...node,
+    health: getMockHealthStatus(node.id),
+  }));
+
+  return topologyData;
+}
+
+// Mock health status function - in production this would come from monitoring data
+function getMockHealthStatus(
+  nodeId: string,
+): "healthy" | "warning" | "critical" {
+  // Simulate some nodes having issues based on ID patterns
+  if (nodeId.includes("switch") && Math.random() > 0.8) return "warning";
+  if (nodeId.includes("router") && Math.random() > 0.9) return "critical";
+  if (nodeId.includes("server") && Math.random() > 0.85) return "warning";
+  return "healthy";
 }
 
 // ─── Lab controls ─────────────────────────────────────────────────────────────

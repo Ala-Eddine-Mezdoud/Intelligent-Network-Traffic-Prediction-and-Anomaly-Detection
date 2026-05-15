@@ -49,8 +49,12 @@ function nodeRadius(n: SimNode): number {
   return 11;
 }
 
-function nodeColor(zone: NodeZone): string {
-  return ZONE_META[zone]?.color ?? "#94a3b8";
+function nodeColor(node: SimNode): string {
+  // Use health status if available, otherwise fall back to zone color
+  if (node.health === "healthy") return "#10b981"; // green
+  if (node.health === "warning") return "#f59e0b"; // orange
+  if (node.health === "critical") return "#ef4444"; // red
+  return ZONE_META[node.zone]?.color ?? "#94a3b8";
 }
 
 function nodeSymbol(type: string, r: number): string {
@@ -71,7 +75,7 @@ function renderGraph(
   containerEl: HTMLDivElement,
   nodes: TopoNode[],
   links: TopoLink[],
-  onTooltip: (t: TooltipState | null) => void
+  onTooltip: (t: TooltipState | null) => void,
 ): () => void {
   const W = containerEl.clientWidth || 800;
   const H = containerEl.clientHeight || 600;
@@ -87,7 +91,10 @@ function renderGraph(
   // Glow filter for hover
   const defs = svg.append("defs");
   const filter = defs.append("filter").attr("id", "glow");
-  filter.append("feGaussianBlur").attr("stdDeviation", "3").attr("result", "blur");
+  filter
+    .append("feGaussianBlur")
+    .attr("stdDeviation", "3")
+    .attr("result", "blur");
   const feMerge = filter.append("feMerge");
   feMerge.append("feMergeNode").attr("in", "blur");
   feMerge.append("feMergeNode").attr("in", "SourceGraphic");
@@ -124,33 +131,47 @@ function renderGraph(
           if ((l as SimLink).kind === "control") return 200;
           if (s.zone === "backbone" || t.zone === "backbone") return 150;
           return 90;
-        })
+        }),
     )
     .force("charge", d3.forceManyBody().strength(-350))
     .force("center", d3.forceCenter(W / 2, H / 2))
-    .force("collision", d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 8));
+    .force(
+      "collision",
+      d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 8),
+    );
 
-  // Links
-  const linkGroup = g.append("g").attr("class", "links");
-  const linkEl = linkGroup
-    .selectAll("line")
-    .data(simLinks)
-    .join("line")
-    .attr("stroke", (d) => {
-      if ((d as SimLink).kind === "control") return "#c084fc55";
-      const s = d.source as SimNode;
-      if (s.zone === "backbone") return "#475569";
-      return nodeColor(s.zone) + "55";
-    })
-    .attr("stroke-width", (d) => {
-      const s = d.source as SimNode;
-      return s.zone === "backbone" ? 1.5 : 1;
-    })
-    .attr("stroke-dasharray", (d) => {
-      if ((d as SimLink).kind === "control") return "6,3";
-      const s = d.source as SimNode;
-      return s.zone === "backbone" ? "4,3" : "none";
-    });
+  // Animated traffic particles
+  const particleGroup = g.append("g").attr("class", "particles");
+
+  // Create animated particles for data links
+  const dataLinks = simLinks.filter((l) => (l as SimLink).kind !== "control");
+  const particles = particleGroup
+    .selectAll("circle")
+    .data(dataLinks)
+    .join("circle")
+    .attr("r", 2)
+    .attr("fill", "#67e8f9")
+    .attr("opacity", 0.8);
+
+  // Animation function for particles
+  function animateParticles() {
+    particles
+      .attr("cx", (d) => {
+        const source = d.source as SimNode;
+        const target = d.target as SimNode;
+        const progress = (Date.now() / 2000) % 1; // 2 second cycle
+        return source.x! + (target.x! - source.x!) * progress;
+      })
+      .attr("cy", (d) => {
+        const source = d.source as SimNode;
+        const target = d.target as SimNode;
+        const progress = (Date.now() / 2000) % 1;
+        return source.y! + (target.y! - source.y!) * progress;
+      });
+  }
+
+  // Start particle animation
+  const animationId = setInterval(animateParticles, 50);
 
   // Nodes
   const nodeGroup = g.append("g").attr("class", "nodes");
@@ -176,12 +197,16 @@ function renderGraph(
           if (!event.active) sim.alphaTarget(0);
           d.fx = null;
           d.fy = null;
-        })
+        }),
     )
     .on("mouseenter", function (event, d) {
       d3.select(this).select(".node-shape").attr("filter", "url(#glow)");
       const rect = svgEl.getBoundingClientRect();
-      onTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, node: d });
+      onTooltip({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        node: d,
+      });
     })
     .on("mouseleave", function () {
       d3.select(this).select(".node-shape").attr("filter", null);
@@ -191,7 +216,7 @@ function renderGraph(
   nodeEl.each(function (d) {
     const el = d3.select(this);
     const r = nodeRadius(d);
-    const color = nodeColor(d.zone);
+    const color = nodeColor(d);
 
     if (d.type === "switch" || d.type === "router" || d.type === "controller") {
       el.append("path")
@@ -239,7 +264,10 @@ function renderGraph(
     nodeEl.attr("transform", (d) => `translate(${d.x},${d.y})`);
   });
 
-  return () => sim.stop();
+  return () => {
+    sim.stop();
+    clearInterval(animationId);
+  };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -282,19 +310,20 @@ export function TopologyGraph() {
       containerRef.current,
       nodes,
       links,
-      setTooltip
+      setTooltip,
     );
     return cleanup;
   }, [nodes, links]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full">
-
       {/* Loading state */}
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/80 z-20">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/5 backdrop-blur-md z-20">
           <div className="w-8 h-8 rounded-full border-2 border-zinc-600 border-t-blue-400 animate-spin" />
-          <p className="text-xs font-mono text-zinc-400">Fetching topology from Mininet…</p>
+          <p className="text-xs font-mono text-zinc-400">
+            Fetching topology from Mininet…
+          </p>
         </div>
       )}
 
@@ -321,7 +350,7 @@ export function TopologyGraph() {
       {/* Hover tooltip */}
       {tooltip && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-border bg-zinc-900/95 px-3 py-2 text-xs font-mono shadow-xl"
+          className="pointer-events-none absolute z-10 rounded-md border border-border bg-white/10 backdrop-blur-md px-3 py-2 text-xs font-mono shadow-xl text-white"
           style={{
             left: tooltip.x + 12,
             top: tooltip.y - 8,
@@ -331,14 +360,24 @@ export function TopologyGraph() {
           <p className="font-semibold text-white mb-1">{tooltip.node.id}</p>
           <p>
             <span className="text-zinc-400">type: </span>
-            <span style={{ color: nodeColor(tooltip.node.zone) }}>{tooltip.node.type}</span>
+            <span style={{ color: nodeColor(tooltip.node) }}>
+              {tooltip.node.type}
+            </span>
           </p>
           <p>
             <span className="text-zinc-400">zone: </span>
-            <span style={{ color: nodeColor(tooltip.node.zone) }}>
+            <span style={{ color: nodeColor(tooltip.node) }}>
               {ZONE_META[tooltip.node.zone]?.label}
             </span>
           </p>
+          {tooltip.node.health && (
+            <p>
+              <span className="text-zinc-400">health: </span>
+              <span style={{ color: nodeColor(tooltip.node) }}>
+                {tooltip.node.health}
+              </span>
+            </p>
+          )}
           {tooltip.node.ip && (
             <p>
               <span className="text-zinc-400">ip: </span>
@@ -350,18 +389,21 @@ export function TopologyGraph() {
 
       {/* Zone legend */}
       {!loading && !error && (
-        <div className="absolute bottom-3 left-3 flex flex-col gap-1 bg-zinc-900/80 border border-border rounded-md px-3 py-2 text-xs font-mono">
-          {(Object.entries(ZONE_META) as [NodeZone, (typeof ZONE_META)[NodeZone]][]).map(
-            ([zone, meta]) => (
-              <div key={zone} className="flex items-center gap-2">
-                <span
-                  className="inline-block w-2 h-2 rounded-full"
-                  style={{ backgroundColor: meta.color }}
-                />
-                <span style={{ color: meta.color }}>{meta.label}</span>
-              </div>
-            )
-          )}
+        <div className="absolute bottom-3 left-3 flex flex-col gap-1 bg-white/5 backdrop-blur-md border border-border rounded-md px-3 py-2 text-xs font-mono text-zinc-100">
+          {(
+            Object.entries(ZONE_META) as [
+              NodeZone,
+              (typeof ZONE_META)[NodeZone],
+            ][]
+          ).map(([zone, meta]) => (
+            <div key={zone} className="flex items-center gap-2">
+              <span
+                className="inline-block w-2 h-2 rounded-full"
+                style={{ backgroundColor: meta.color }}
+              />
+              <span style={{ color: meta.color }}>{meta.label}</span>
+            </div>
+          ))}
           <hr className="border-border my-1" />
           <div className="flex items-center gap-4 text-zinc-400">
             <span>■ switch</span>
