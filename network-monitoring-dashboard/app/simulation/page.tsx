@@ -54,7 +54,7 @@ const ANOMALY_CONFIGS = [
     type: "latency",
     label: "Latency",
     icon: Clock,
-    color: "yellow",
+    color: "orange",
     desc: "300 ms delay spike",
   },
   {
@@ -68,14 +68,14 @@ const ANOMALY_CONFIGS = [
     type: "jitter",
     label: "Jitter",
     icon: Wifi,
-    color: "purple",
+    color: "orange",
     desc: "80 ms jitter on link",
   },
   {
     type: "brownout",
     label: "Brownout",
     icon: AlertTriangle,
-    color: "amber",
+    color: "orange",
     desc: "Combined degradation",
   },
   {
@@ -89,14 +89,14 @@ const ANOMALY_CONFIGS = [
     type: "portscan",
     label: "Port Scan",
     icon: Bug,
-    color: "cyan",
+    color: "orange",
     desc: "Rapid port sweep",
   },
   {
     type: "brute_force",
     label: "Brute Force",
     icon: Shield,
-    color: "pink",
+    color: "red",
     desc: "SSH connection burst",
   },
 ] as const;
@@ -115,23 +115,15 @@ const ANOMALY_NODES: Record<AnomalyType, string[]> = {
 };
 
 const colorMap: Record<string, string> = {
-  orange: "border-orange-500/40 text-orange-300 hover:bg-orange-500/10",
-  yellow: "border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10",
-  red: "border-red-500/40 text-red-300 hover:bg-red-500/10",
-  purple: "border-purple-500/40 text-purple-300 hover:bg-purple-500/10",
-  amber: "border-amber-500/40 text-amber-300 hover:bg-amber-500/10",
-  cyan: "border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10",
-  pink: "border-pink-500/40 text-pink-300 hover:bg-pink-500/10",
+  orange: "border-orange-500/30 text-orange-600 hover:bg-orange-500/10",
+  red: "border-red-500/30 text-red-600 hover:bg-red-500/10",
+  gray: "border-gray-200 text-gray-600 hover:bg-gray-50",
 };
 
 const colorActiveMap: Record<string, string> = {
-  orange: "bg-orange-500/20 border-orange-400 text-orange-300",
-  yellow: "bg-yellow-500/20 border-yellow-400 text-yellow-300",
-  red: "bg-red-500/20 border-red-400 text-red-300",
-  purple: "bg-purple-500/20 border-purple-400 text-purple-300",
-  amber: "bg-amber-500/20 border-amber-400 text-amber-300",
-  cyan: "bg-cyan-500/20 border-cyan-400 text-cyan-300",
-  pink: "bg-pink-500/20 border-pink-400 text-pink-300",
+  orange: "bg-orange-500/10 border-orange-500/30 text-orange-600",
+  red: "bg-red-500/10 border-red-500/30 text-red-600",
+  gray: "bg-gray-100 border-gray-200 text-gray-900",
 };
 
 export default function SimulationPage() {
@@ -338,17 +330,17 @@ export default function SimulationPage() {
         {/* ── Page Header ──────────────────────────────────────────────── */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
               Network Simulation Lab
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-gray-500 mt-1">
               Run steady-state or full simulation, then inject anomalies to test
               GNN detection.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-zinc-900 border border-border rounded-full px-3 py-1.5">
+          <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5">
             <span
-              className={`w-2 h-2 rounded-full ${anySimRunning ? "bg-sky-400 animate-pulse" : "bg-zinc-600"}`}
+              className={`w-2 h-2 rounded-full ${anySimRunning ? "bg-green-500 animate-pulse" : "bg-gray-200"}`}
             />
             {anySimRunning
               ? isNormalRunning
@@ -360,51 +352,51 @@ export default function SimulationPage() {
 
         {/* ── GNN Status Bar ─────────────────────────────────────────── */}
         {gnnActive && (
-          <div className="rounded-xl border border-sky-500/20 bg-sky-950/20 px-4 py-3 flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2 text-xs text-sky-300">
-              <Network className="h-4 w-4" />
-              <span className="font-semibold">GNN Active</span>
-              <span className="text-zinc-500">·</span>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-4 flex-wrap shadow-sm">
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Network className="h-4 w-4 text-gray-900" />
+              <span className="font-semibold text-gray-900">GNN Active</span>
+              <span className="text-gray-400">·</span>
               <span>{predsMade} predictions</span>
             </div>
             {windowState && (
               <div
                 className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
                   windowState === "NORMAL"
-                    ? "border-green-500/30 text-green-300 bg-green-500/10"
+                    ? "border-green-500/30 text-gray-900 bg-green-500/10"
                     : windowState === "WARNING"
-                      ? "border-orange-500/30 text-orange-300 bg-orange-500/10 animate-pulse"
-                      : "border-red-500/30 text-red-300 bg-red-500/10 animate-pulse"
+                      ? "border-orange-500/30 text-orange-600 bg-orange-500/10 animate-pulse"
+                      : "border-red-500/30 text-red-600 bg-red-500/10 animate-pulse"
                 }`}
               >
                 {windowState !== "NORMAL" && <Siren className="h-3 w-3" />}
                 {windowState}
                 {anomalyCount > 0 && (
-                  <span className="ml-1 text-red-300">
+                  <span className="ml-1 text-red-600">
                     · {anomalyCount} nodes
                   </span>
                 )}
               </div>
             )}
             {isRealtimeRunning && nextAttack && nextAttackIn != null && (
-              <div className="flex items-center gap-1.5 text-xs text-slate-300 bg-slate-900/20 border border-slate-700/20 rounded-full px-2.5 py-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-full px-2.5 py-0.5">
                 <Clock className="h-3 w-3" />
                 Next: {nextAttack} in {nextAttackIn}s
               </div>
             )}
             {lastAttack && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-gray-500">
                 Last attack:{" "}
-                <span className="text-zinc-300">{lastAttack.name}</span>
+                <span className="text-gray-900">{lastAttack.name}</span>
               </span>
             )}
             {activeOpAnomalies.length > 0 && (
               <div className="flex flex-wrap gap-1.5 items-center">
-                <span className="text-[11px] text-zinc-500">Active:</span>
+                <span className="text-[11px] text-gray-500">Active:</span>
                 {activeOpAnomalies.map((a: any, i: number) => (
                   <span
                     key={i}
-                    className="text-[11px] bg-zinc-800 border border-border rounded-full px-2 py-0.5 text-zinc-300"
+                    className="text-[11px] bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5 text-gray-600"
                   >
                     {a.node} · {a.profile} ·{" "}
                     {Math.max(0, Math.round(a.expires_at - Date.now() / 1000))}s
@@ -416,29 +408,29 @@ export default function SimulationPage() {
         )}
 
         {/* ── Simulation Mode Selector ──────────────────────────────── */}
-        <div className="rounded-xl border border-border bg-white/5 backdrop-blur-xl p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
             Simulation Mode
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Normal Mode */}
             <div
-              className={`rounded-lg border p-4 space-y-3 transition-colors ${isNormalRunning ? "border-sky-500/40 bg-sky-950/10" : "border-border bg-white/5"}`}
+              className={`rounded-lg border p-4 space-y-3 transition-colors ${isNormalRunning ? "border-green-500/30 bg-green-500/10" : "border-gray-200 bg-gray-50"}`}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${isNormalRunning ? "bg-sky-400 animate-pulse" : "bg-zinc-600"}`}
+                  className={`w-2 h-2 rounded-full shrink-0 ${isNormalRunning ? "bg-green-500 animate-pulse" : "bg-gray-200"}`}
                 />
-                <span className="text-sm font-semibold text-zinc-200">
+                <span className="text-sm font-semibold text-gray-900">
                   Normal Simulation
                 </span>
                 <span
-                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isNormalRunning ? "border-sky-500/30 text-sky-300 bg-sky-950/20" : "border-border text-zinc-500"}`}
+                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isNormalRunning ? "border-green-500/30 text-gray-900 bg-green-500/10" : "border-gray-200 text-gray-500"}`}
                 >
                   {isNormalRunning ? "Running" : "Stopped"}
                 </span>
               </div>
-              <p className="text-[12px] text-zinc-400 leading-snug">
+              <p className="text-[12px] text-gray-500 leading-snug">
                 Steady balanced traffic across all 26 nodes — matching GNN
                 training conditions. No auto-attacks. Use the injection panel
                 below to test anomaly detection.
@@ -448,7 +440,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStopNormal}
                     disabled={simLoading || isRealtimeRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700/60 text-sky-300 hover:bg-slate-900/60 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
                   >
                     <Square className="w-3 h-3 fill-current" />
                     {simLoading ? "Stopping…" : "Stop"}
@@ -457,7 +449,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStartNormal}
                     disabled={simLoading || anySimRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-gray-900 hover:bg-gray-800 text-white transition-colors disabled:opacity-40"
                   >
                     <Play className="w-3 h-3 fill-current" />
                     {simLoading ? "Starting…" : "Start Normal"}
@@ -468,22 +460,22 @@ export default function SimulationPage() {
 
             {/* Full Mode */}
             <div
-              className={`rounded-lg border p-4 space-y-3 transition-colors ${isRealtimeRunning ? "border-sky-500/40 bg-sky-950/10" : "border-border bg-white/5"}`}
+              className={`rounded-lg border p-4 space-y-3 transition-colors ${isRealtimeRunning ? "border-green-500/30 bg-green-500/10" : "border-gray-200 bg-gray-50"}`}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${isRealtimeRunning ? "bg-sky-400 animate-pulse" : "bg-zinc-600"}`}
+                  className={`w-2 h-2 rounded-full shrink-0 ${isRealtimeRunning ? "bg-green-500 animate-pulse" : "bg-gray-200"}`}
                 />
-                <span className="text-sm font-semibold text-zinc-200">
+                <span className="text-sm font-semibold text-gray-900">
                   Full Simulation
                 </span>
                 <span
-                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isRealtimeRunning ? "border-sky-500/30 text-sky-300 bg-sky-950/20" : "border-border text-zinc-500"}`}
+                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isRealtimeRunning ? "border-green-500/30 text-gray-900 bg-green-500/10" : "border-gray-200 text-gray-500"}`}
                 >
                   {isRealtimeRunning ? "Running" : "Stopped"}
                 </span>
               </div>
-              <p className="text-[12px] text-zinc-400 leading-snug">
+              <p className="text-[12px] text-gray-500 leading-snug">
                 Full realtime pipeline with periodic attack injection (DDoS,
                 PortScan, SSH-Patator…), pcap capture, and IDS inference every
                 30 s.
@@ -493,7 +485,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStopRealtime}
                     disabled={simLoading || isNormalRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700/60 text-sky-300 hover:bg-slate-900/60 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
                   >
                     <Square className="w-3 h-3 fill-current" />
                     {simLoading ? "Stopping…" : "Stop"}
@@ -502,7 +494,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStartRealtime}
                     disabled={simLoading || anySimRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-gray-900 hover:bg-gray-800 text-white transition-colors disabled:opacity-40"
                   >
                     <Play className="w-3 h-3 fill-current" />
                     {simLoading ? "Starting…" : "Start Full"}
@@ -514,19 +506,19 @@ export default function SimulationPage() {
         </div>
 
         {/* ── Manual Anomaly Injection ──────────────────────────────── */}
-        <div className="rounded-xl border border-border bg-white/5 backdrop-blur-xl p-4 space-y-4">
+        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-sky-300">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-900">
                 Manual Anomaly Injection
               </p>
-              <p className="text-[12px] text-zinc-500 mt-0.5">
+              <p className="text-[12px] text-gray-500 mt-0.5">
                 Inject a specific anomaly and observe GNN detection in real
                 time.
               </p>
             </div>
             {!anySimRunning && (
-              <span className="text-[11px] text-slate-300 bg-slate-900/20 border border-slate-700/20 rounded-full px-2.5 py-0.5">
+              <span className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-0.5">
                 Start a simulation first
               </span>
             )}
@@ -546,14 +538,14 @@ export default function SimulationPage() {
                   className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all ${
                     isSelected
                       ? colorActiveMap[color]
-                      : `bg-zinc-950 ${colorMap[color]}`
+                      : `bg-white ${colorMap[color]}`
                   }`}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="text-[12px] font-semibold leading-tight">
                     {label}
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-tight">
+                  <span className="text-[10px] text-gray-500 leading-tight">
                     {desc}
                   </span>
                 </button>
@@ -563,16 +555,16 @@ export default function SimulationPage() {
 
           {/* Config Row */}
           {selectedAnomaly && (
-            <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-border/40">
+            <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-gray-200/40">
               {/* Node selector */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-zinc-500 uppercase tracking-wider">
+                <label className="text-[11px] text-gray-500 uppercase tracking-wider">
                   Target Node
                 </label>
                 <select
                   value={selectedNode}
                   onChange={(e) => setSelectedNode(e.target.value)}
-                  className="bg-zinc-900 border border-border rounded-md px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-zinc-500"
+                  className="bg-white border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-gray-900 outline-none focus:border-gray-500"
                 >
                   <option value="">Auto (default)</option>
                   {availableNodes.map((n) => (
@@ -585,9 +577,9 @@ export default function SimulationPage() {
 
               {/* Duration */}
               <div className="flex flex-col gap-1 min-w-32">
-                <label className="text-[11px] text-zinc-500 uppercase tracking-wider">
+                <label className="text-[11px] text-gray-500 uppercase tracking-wider">
                   Duration:{" "}
-                  <span className="text-zinc-300 font-semibold">
+                  <span className="text-gray-900 font-semibold">
                     {duration}s
                   </span>
                 </label>
@@ -598,7 +590,7 @@ export default function SimulationPage() {
                   step={5}
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
-                  className="w-full accent-orange-400"
+                  className="w-full accent-orange-500"
                 />
               </div>
 
@@ -606,7 +598,7 @@ export default function SimulationPage() {
               <button
                 onClick={handleInjectAnomaly}
                 disabled={!anySimRunning || injecting}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-gray-900 hover:bg-gray-800 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Zap className="w-3.5 h-3.5" />
                 {injecting
@@ -615,7 +607,7 @@ export default function SimulationPage() {
               </button>
 
               {lastInjected && (
-                <span className="text-[11px] text-slate-300 bg-slate-900/30 border border-slate-700/20 rounded-full px-2.5 py-1">
+                <span className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
                   ✓ {lastInjected}
                 </span>
               )}
@@ -625,10 +617,10 @@ export default function SimulationPage() {
 
         {/* ── Data & Results Storage ──────────────────────────────── */}
         {storageInfo && (
-          <div className="rounded-xl border border-border bg-white/5 backdrop-blur-xl p-4 space-y-3">
+          <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <Database className="h-4 w-4 text-zinc-400" />
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+              <Database className="h-4 w-4 text-gray-500" />
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
                 Data & Results Storage
               </p>
             </div>
@@ -639,7 +631,7 @@ export default function SimulationPage() {
                 count={storageInfo.captures?.pcap_files ?? 0}
                 path="captures/"
                 latest={storageInfo.captures?.latest_pcap}
-                color="blue"
+                color="gray"
               />
               <StorageCard
                 icon={<Cpu className="h-3.5 w-3.5" />}
@@ -647,7 +639,7 @@ export default function SimulationPage() {
                 count={storageInfo.intelligence_out?.inference_files ?? 0}
                 path="captures/intelligence_out/"
                 latest={storageInfo.intelligence_out?.latest_inference}
-                color="purple"
+                color="orange"
               />
               <StorageCard
                 icon={<Siren className="h-3.5 w-3.5" />}
@@ -663,7 +655,7 @@ export default function SimulationPage() {
                 count={storageInfo.gnn_datasets?.dataset_count ?? 0}
                 path="captures/gnn_datasets/"
                 latest={storageInfo.gnn_datasets?.latest_dataset}
-                color="cyan"
+                color="orange"
               />
               <StorageCard
                 icon={<Database className="h-3.5 w-3.5" />}
@@ -671,20 +663,20 @@ export default function SimulationPage() {
                 count={storageInfo.collector_inbox?.pending_files ?? 0}
                 path="captures/collector_inbox/"
                 latest={null}
-                color="amber"
+                color="gray"
               />
             </div>
-            <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono text-zinc-500">
+            <div className="pt-2 border-t border-gray-200/40 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono text-gray-500">
               <div>
-                <span className="text-zinc-400">GNN model:</span>{" "}
+                <span className="text-gray-500">GNN model:</span>{" "}
                 ml_training/gnn_model_complete.pt
               </div>
               <div>
-                <span className="text-zinc-400">Best model:</span>{" "}
+                <span className="text-gray-500">Best model:</span>{" "}
                 ml_training/best_model.pt
               </div>
               <div>
-                <span className="text-zinc-400">Backend models:</span>{" "}
+                <span className="text-gray-500">Backend models:</span>{" "}
                 mininetDashboard/backend/models/
               </div>
             </div>
@@ -697,14 +689,14 @@ export default function SimulationPage() {
           style={{ height: 700 }}
         >
           {/* Topology Graph */}
-          <div className="lg:col-span-3 border border-border bg-white/5 backdrop-blur-xl rounded-xl overflow-hidden shadow-sm">
+          <div className="lg:col-span-3 bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
             <TopologyGraph />
           </div>
 
           {/* Lab Control Panel */}
           <div className="flex flex-col gap-4 overflow-y-auto">
-            <section className="border border-border bg-white/5 backdrop-blur-xl rounded-xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+            <section className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-3">
                 Lab Status
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -713,21 +705,21 @@ export default function SimulationPage() {
                   active={!!status?.capture_running}
                   activeText="Active"
                   inactiveText="Idle"
-                  activeColor="text-sky-300 bg-sky-400/10 border-sky-400/20"
+                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
                 />
                 <StatusBadge
                   label="Traffic"
                   active={!!status?.traffic_running}
                   activeText="Running"
                   inactiveText="Idle"
-                  activeColor="text-blue-400 bg-blue-400/10 border-blue-400/20"
+                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
                 />
                 <StatusBadge
                   label="Relay"
                   active={!!status?.last_relay}
                   activeText="Ready"
                   inactiveText="Not done"
-                  activeColor="text-sky-300 bg-sky-400/10 border-sky-400/20"
+                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
                 />
                 <StatusBadge
                   label="Inference"
@@ -737,13 +729,13 @@ export default function SimulationPage() {
                     "Done"
                   }
                   inactiveText="Not run"
-                  activeColor="text-sky-300 bg-sky-400/10 border-sky-400/20"
+                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
                 />
               </div>
               {status?.last_capture_id && (
-                <p className="mt-3 text-[11px] font-mono text-zinc-500">
+                <p className="mt-3 text-[11px] font-mono text-gray-500">
                   Last ID:{" "}
-                  <span className="text-zinc-300">
+                  <span className="text-gray-900">
                     {status.last_capture_id}
                   </span>
                 </p>
@@ -753,7 +745,7 @@ export default function SimulationPage() {
             <PhaseCard
               phase="01"
               title="Packet Capture"
-              accent="blue"
+              accent="gray"
               description="Start and stop pcap collection across interfaces."
             >
               <div className="grid grid-cols-2 gap-2">
@@ -772,7 +764,7 @@ export default function SimulationPage() {
                   icon={<Play className="w-3.5 h-3.5" />}
                   label="Start"
                   variant="solid"
-                  color="blue"
+                  color="gray"
                 />
                 <ActionButton
                   onClick={() =>
@@ -789,7 +781,7 @@ export default function SimulationPage() {
                   icon={<Square className="w-3.5 h-3.5" />}
                   label="Stop"
                   variant="ghost"
-                  color="blue"
+                  color="gray"
                 />
               </div>
             </PhaseCard>
@@ -797,7 +789,7 @@ export default function SimulationPage() {
             <PhaseCard
               phase="02"
               title="Traffic Generation"
-              accent="emerald"
+              accent="green"
               description="Inject synthetic network traffic for 90 seconds."
             >
               <div className="grid grid-cols-2 gap-2">
@@ -816,7 +808,7 @@ export default function SimulationPage() {
                   icon={<Activity className="w-3.5 h-3.5" />}
                   label="Run"
                   variant="solid"
-                  color="emerald"
+                  color="green"
                 />
                 <ActionButton
                   onClick={() =>
@@ -833,7 +825,7 @@ export default function SimulationPage() {
                   icon={<Square className="w-3.5 h-3.5" />}
                   label="Stop"
                   variant="ghost"
-                  color="emerald"
+                  color="green"
                 />
               </div>
             </PhaseCard>
@@ -841,7 +833,7 @@ export default function SimulationPage() {
             <PhaseCard
               phase="03"
               title="Relay Capture"
-              accent="amber"
+              accent="orange"
               description="Forward capture files to the collector inbox."
               blockedReason={
                 !canRelay ? (relayBlockedReason ?? undefined) : undefined
@@ -862,11 +854,11 @@ export default function SimulationPage() {
                 icon={<Send className="w-3.5 h-3.5" />}
                 label="Relay Capture"
                 variant="solid"
-                color="amber"
+                color="orange"
                 full
               />
               {status?.last_relay?.collector_inbox && (
-                <p className="mt-2 text-[11px] font-mono text-zinc-500 truncate">
+                <p className="mt-2 text-[11px] font-mono text-gray-500 truncate">
                   → {status.last_relay.collector_inbox}
                 </p>
               )}
@@ -875,7 +867,7 @@ export default function SimulationPage() {
             <PhaseCard
               phase="04"
               title="AI Inference"
-              accent="purple"
+              accent="orange"
               description="Run the threat detection model on the latest capture."
               blockedReason={
                 !canInfer ? (inferBlockedReason ?? undefined) : undefined
@@ -896,7 +888,7 @@ export default function SimulationPage() {
                 icon={<Cpu className="w-3.5 h-3.5" />}
                 label="Run Inference"
                 variant="solid"
-                color="purple"
+                color="orange"
                 full
               />
               {status?.last_inference?.inference && (
@@ -904,25 +896,25 @@ export default function SimulationPage() {
                   <InferenceStat
                     label="Severity"
                     value={status.last_inference.inference.severity}
-                    color="text-sky-300"
+                    color="text-gray-900"
                   />
                   <InferenceStat
                     label="Risk"
                     value={status.last_inference.inference.risk_score}
-                    color="text-sky-300"
+                    color="text-gray-900"
                   />
                   <InferenceStat
                     label="Flows"
                     value={`${status.last_inference.inference.suspicious_flows}/${status.last_inference.inference.total_flows}`}
-                    color="text-zinc-400"
+                    color="text-gray-600"
                   />
                 </div>
               )}
             </PhaseCard>
 
             {lastError && (
-              <div className="rounded-lg border border-slate-700/40 bg-slate-950/30 px-3 py-2.5 text-xs font-mono text-slate-300">
-                <p className="text-slate-300 text-[11px] uppercase tracking-wider mb-1">
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs font-mono text-red-600">
+                <p className="text-red-600 text-[11px] uppercase tracking-wider mb-1">
                   Error
                 </p>
                 <p>{lastError}</p>
@@ -951,12 +943,12 @@ function StatusBadge({
   activeColor: string;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-lg border border-border bg-zinc-950 px-2.5 py-2">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">
+    <div className="flex flex-col gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
+      <span className="text-[10px] uppercase tracking-wider text-gray-500">
         {label}
       </span>
       <span
-        className={`text-xs font-medium rounded px-1.5 py-0.5 w-fit border ${active ? activeColor : "text-zinc-500 bg-transparent border-transparent"}`}
+        className={`text-xs font-medium rounded px-1.5 py-0.5 w-fit border ${active ? activeColor : "text-gray-500 bg-transparent border-transparent"}`}
       >
         {active ? activeText : inactiveText}
       </span>
@@ -965,16 +957,14 @@ function StatusBadge({
 }
 
 const accentMap: Record<string, string> = {
-  blue: "border-l-blue-500",
-  emerald: "border-l-emerald-500",
-  amber: "border-l-amber-500",
-  purple: "border-l-purple-500",
+  gray: "border-l-gray-500",
+  green: "border-l-green-500",
+  orange: "border-l-orange-500",
 };
 const phaseTextMap: Record<string, string> = {
-  blue: "text-blue-400",
-  emerald: "text-emerald-400",
-  amber: "text-amber-400",
-  purple: "text-purple-400",
+  gray: "text-gray-600",
+  green: "text-green-500",
+  orange: "text-orange-500",
 };
 
 function PhaseCard({
@@ -994,7 +984,7 @@ function PhaseCard({
 }) {
   return (
     <section
-      className={`border border-border border-l-2 ${accentMap[accent]} bg-card rounded-xl p-4 flex flex-col gap-3`}
+      className={`border border-gray-200 border-l-2 ${accentMap[accent]} bg-white rounded-xl p-4 flex flex-col gap-3 shadow-sm`}
     >
       <div>
         <div className="flex items-center gap-2 mb-0.5">
@@ -1003,10 +993,10 @@ function PhaseCard({
           >
             PHASE {phase}
           </span>
-          <span className="text-[10px] text-zinc-600">·</span>
-          <span className="text-xs font-medium text-zinc-200">{title}</span>
+          <span className="text-[10px] text-gray-600">·</span>
+          <span className="text-xs font-medium text-gray-900">{title}</span>
         </div>
-        <p className="text-[11px] text-zinc-500 leading-snug">{description}</p>
+        <p className="text-[11px] text-gray-500 leading-snug">{description}</p>
       </div>
       {children}
       {blockedReason && (
@@ -1017,13 +1007,6 @@ function PhaseCard({
     </section>
   );
 }
-
-const btnSolidMap: Record<string, string> = {
-  blue: "bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30",
-  emerald: "bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/30",
-  amber: "bg-amber-600 hover:bg-amber-500 disabled:bg-amber-600/30",
-  purple: "bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/30",
-};
 
 function ActionButton({
   onClick,
@@ -1047,9 +1030,10 @@ function ActionButton({
   full?: boolean;
 }) {
   const base =
-    "flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors disabled:cursor-not-allowed text-white";
-  const solid = btnSolidMap[color] ?? "";
-  const ghost = "border border-border hover:bg-zinc-800 disabled:opacity-40";
+    "flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors disabled:cursor-not-allowed";
+  const solid = "bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-40";
+  const ghost =
+    "border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40";
   return (
     <button
       onClick={onClick}
@@ -1072,8 +1056,8 @@ function InferenceStat({
   color: string;
 }) {
   return (
-    <div className="flex flex-col items-center bg-zinc-950 rounded-md px-1.5 py-1.5 border border-border">
-      <span className="text-[9px] uppercase tracking-wider text-zinc-600 mb-0.5">
+    <div className="flex flex-col items-center bg-gray-50 rounded-md px-1.5 py-1.5 border border-gray-200">
+      <span className="text-[9px] uppercase tracking-wider text-gray-600 mb-0.5">
         {label}
       </span>
       <span
@@ -1086,11 +1070,9 @@ function InferenceStat({
 }
 
 const storageColorMap: Record<string, string> = {
-  blue: "text-blue-400 border-blue-500/20 bg-blue-950/10",
-  purple: "text-purple-400 border-purple-500/20 bg-purple-950/10",
-  red: "text-red-400 border-red-500/20 bg-red-950/10",
-  cyan: "text-cyan-400 border-cyan-500/20 bg-cyan-950/10",
-  amber: "text-amber-400 border-amber-500/20 bg-amber-950/10",
+  gray: "text-gray-600 border-gray-200 bg-gray-50",
+  orange: "text-orange-600 border-orange-500/30 bg-orange-500/10",
+  red: "text-red-600 border-red-500/30 bg-red-500/10",
 };
 
 function StorageCard({
@@ -1117,10 +1099,10 @@ function StorageCard({
         <span className="text-[11px] font-semibold">{label}</span>
         <span className="ml-auto text-lg font-bold">{count}</span>
       </div>
-      <div className="text-[10px] text-zinc-500 font-mono truncate">{path}</div>
+      <div className="text-[10px] text-gray-500 font-mono truncate">{path}</div>
       {latest && (
         <div
-          className="text-[10px] text-zinc-600 font-mono truncate"
+          className="text-[10px] text-gray-600 font-mono truncate"
           title={latest}
         >
           Latest: {latest}

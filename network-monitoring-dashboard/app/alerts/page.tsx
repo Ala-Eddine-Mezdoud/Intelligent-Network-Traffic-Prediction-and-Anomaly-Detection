@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { showAlertToast } from "@/components/alert-notification";
 import { getAlerts, getAlertStats } from "@/lib/api";
-import { MetricCard } from "@/components/metric-card";
+import { MetricCard, MetricCardSkeletonGrid } from "@/components/metric-card";
+import { AlertsListSkeleton } from "@/components/skeletons";
 import { SEVERITY_STYLES } from "@/lib/dashboard-theme";
+import { getAlertCardAccent, pageSubtitle, pageTitle } from "@/lib/ui-theme";
 
 interface Alert {
   id: string;
@@ -83,12 +85,6 @@ export default function Alerts() {
     return `${config.bg} ${config.text} ${config.border}`;
   };
 
-  const getSeverityBorderColor = (severity: string) => {
-    const s = severity.toLowerCase();
-    const config = SEVERITY_STYLES[s] || SEVERITY_STYLES.default;
-    return `${config.border} hover:shadow-${s === 'critical' || s === 'high' ? 'red' : s === 'warning' || s === 'medium' ? 'orange' : 'green'}-500/10`;
-  };
-
   const getSeverityTextColor = (severity: string) => {
     const s = severity.toLowerCase();
     return (SEVERITY_STYLES[s] || SEVERITY_STYLES.default).text;
@@ -97,9 +93,8 @@ export default function Alerts() {
   if (isLoading || !stats) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Loading...</div>
-        </div>
+        <MetricCardSkeletonGrid count={3} className="mb-4" />
+        <AlertsListSkeleton count={5} />
       </DashboardLayout>
     );
   }
@@ -110,8 +105,8 @@ export default function Alerts() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Alerts</h1>
-            <p className="text-muted-foreground">
+            <h1 className={pageTitle}>Alerts</h1>
+            <p className={pageSubtitle}>
               Security alerts and notifications from your network
             </p>
           </div>
@@ -125,6 +120,7 @@ export default function Alerts() {
 {/* ── Alert Statistics ───────────────────────────────────────────── */}
 <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3 mb-4">
   <MetricCard
+    index={0}
     title="Total Alerts"
     value={stats.total}
     icon={<Activity className="h-5 w-5" />}
@@ -141,6 +137,7 @@ export default function Alerts() {
   />
 
   <MetricCard
+    index={1}
     title="Critical Alerts"
     value={stats.critical}
     icon={<AlertTriangle className="h-5 w-5" />}
@@ -151,6 +148,7 @@ export default function Alerts() {
   />
 
   <MetricCard
+    index={2}
     title="Warnings"
     value={stats.warnings}
     icon={<TrendingUp className="h-5 w-5" />}
@@ -165,7 +163,7 @@ export default function Alerts() {
           {alerts.map((alert) => (
             <Card
               key={alert.id}
-              className={`border-border bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/40 cursor-pointer transition-all hover:shadow-lg ${getSeverityBorderColor(alert.severity)}`}
+              className={`cursor-pointer transition-shadow hover:shadow-md ${getAlertCardAccent(alert.severity)}`}
             >
               <div className="p-4 md:p-6 flex flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-0">
                 <div className="flex-1">
@@ -182,17 +180,17 @@ export default function Alerts() {
                       {alert.title}
                     </h3>
                   </div>
-                  <p className="text-muted-foreground mb-3">
+                  <p className="mb-3 text-gray-600">
                     {alert.description}
                   </p>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-gray-500">
                     {alert.time}
                   </div>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-accent hover:bg-accent/20"
+                  className="text-gray-600 hover:bg-gray-100"
                 >
                   <ChevronRight className="h-5 w-5" />
                 </Button>

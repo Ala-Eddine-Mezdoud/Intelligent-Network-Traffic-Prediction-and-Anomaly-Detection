@@ -27,6 +27,8 @@ import {
   getGnnCaptureStatus,
   getGnnDatasets,
 } from "@/lib/api";
+import { pageSubtitle, pageTitle, primaryButton } from "@/lib/ui-theme";
+import { cn } from "@/lib/utils";
 
 export default function DataGenerationPage() {
   const [status, setStatus] = useState<any>(null);
@@ -98,22 +100,20 @@ export default function DataGenerationPage() {
     <DashboardLayout>
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">
-            GNN Data Generation
-          </h1>
-          <p className="text-muted-foreground">
+          <h1 className={pageTitle}>GNN Data Generation</h1>
+          <p className={pageSubtitle}>
             Generate time-windowed, graph-structured telemetry datasets for
             training predictive AI models.
           </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border-border bg-white/5 backdrop-blur-xl supports-backdrop-filter:bg-white/5">
+          <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xl">Simulation Control</CardTitle>
                 {status?.running ? (
-                  <Badge variant="default" className="bg-blue-500">
+                  <Badge variant="default" className="bg-green-500">
                     Running
                   </Badge>
                 ) : (
@@ -129,15 +129,15 @@ export default function DataGenerationPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
+                      <span className="text-gray-500">
                         Current Scenario
                       </span>
-                      <span className="font-medium text-primary">
+                      <span className="font-medium text-gray-900">
                         {status.current_scenario || "Starting..."}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
+                      <span className="text-gray-500">
                         Current Phase
                       </span>
                       <span className="font-medium">
@@ -157,19 +157,19 @@ export default function DataGenerationPage() {
               )}
 
               {!status?.running && status?.last_error && !uiError && (
-                <div className="p-3 bg-slate-900/20 border border-slate-700/40 rounded-md text-slate-300 text-sm">
+                <div className="p-3 rounded-md border border-gray-200 bg-gray-50 text-gray-600 text-sm">
                   Last run failed: {status.last_error}
                 </div>
               )}
 
               {uiError && (
-                <div className="p-3 bg-slate-900/20 border border-slate-700/40 rounded-md text-slate-300 text-sm">
+                <div className="p-3 rounded-md border border-gray-200 bg-gray-50 text-gray-600 text-sm">
                   {uiError}
                 </div>
               )}
 
               {!status?.running && status?.last_result && !uiError && (
-                <div className="p-3 bg-sky-950/20 border border-sky-500/30 rounded-md text-sky-300 text-sm">
+                <div className="p-3 rounded-md border border-green-500/30 bg-green-500/10 text-green-600 text-sm">
                   Successfully generated dataset:{" "}
                   {status.last_result.summary?.total_windows} windows.
                 </div>
@@ -179,7 +179,7 @@ export default function DataGenerationPage() {
                 <Button
                   onClick={handleStart}
                   disabled={status?.running || loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  className={cn("w-full text-white", primaryButton)}
                 >
                   <Play className="mr-2 h-4 w-4 shrink-0" />
                   <span className="truncate">Start Full Generation (~55m)</span>
@@ -197,7 +197,7 @@ export default function DataGenerationPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-white/5 backdrop-blur-xl supports-backdrop-filter:bg-white/5">
+          <Card>
             <CardHeader>
               <CardTitle className="text-xl">Generation Settings</CardTitle>
               <CardDescription>
@@ -208,10 +208,10 @@ export default function DataGenerationPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/50">
                   <div className="flex items-center gap-3">
-                    <Clock className="h-5 w-5 text-muted-foreground" />
+                    <Clock className="h-5 w-5 text-gray-500" />
                     <div>
                       <p className="font-medium">Window Interval</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-gray-500">
                         Telemetry sampling rate
                       </p>
                     </div>
@@ -221,10 +221,10 @@ export default function DataGenerationPage() {
 
                 <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/50">
                   <div className="flex items-center gap-3">
-                    <Activity className="h-5 w-5 text-muted-foreground" />
+                    <Activity className="h-5 w-5 text-gray-500" />
                     <div>
                       <p className="font-medium">Prediction Horizons</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-gray-500">
                         Look-ahead labeling
                       </p>
                     </div>
@@ -234,10 +234,10 @@ export default function DataGenerationPage() {
 
                 <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/50">
                   <div className="flex items-center gap-3">
-                    <Database className="h-5 w-5 text-muted-foreground" />
+                    <Database className="h-5 w-5 text-gray-500" />
                     <div>
                       <p className="font-medium">Scenario Library</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-gray-500">
                         Scripted anomaly patterns
                       </p>
                     </div>
@@ -249,7 +249,7 @@ export default function DataGenerationPage() {
           </Card>
         </div>
 
-        <Card className="border-border bg-white/5 backdrop-blur-xl supports-backdrop-filter:bg-white/5">
+        <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -271,7 +271,7 @@ export default function DataGenerationPage() {
           </CardHeader>
           <CardContent>
             {datasets.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-8 text-gray-500">
                 No datasets generated yet. Run a capture to create one.
               </div>
             ) : (
@@ -283,13 +283,13 @@ export default function DataGenerationPage() {
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <FileJson className="h-5 w-5 text-blue-500" />
+                        <FileJson className="h-5 w-5 text-gray-600" />
                         <span className="font-medium">{ds.run_id}</span>
                         <Badge variant="secondary" className="text-xs">
                           {ds.summary?.scenario_name || "multi"}
                         </Badge>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-2">
+                      <div className="text-sm text-gray-500 mt-2">
                         <span className="mr-4">
                           Windows:{" "}
                           <strong>{ds.summary?.total_windows || 0}</strong>
@@ -305,7 +305,7 @@ export default function DataGenerationPage() {
                       </div>
                     </div>
                     <div className="text-right space-y-2">
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-gray-500">
                         {ds.path}
                       </div>
                       {ds.summary?.current_label_distribution && (

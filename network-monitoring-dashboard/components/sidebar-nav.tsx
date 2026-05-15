@@ -1,59 +1,109 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity,
-  AlertTriangle,
+  BarChart3,
   Bell,
-  Box,
+  ChevronRight,
   Database,
-  TrendingUp,
+  FlaskConical,
+  LayoutDashboard,
+  LifeBuoy,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
-  ChevronRight,
-  Moon,
-  Sun,
-  LifeBuoy,
-  LogOut,
-  UserCircle,
+  Radar,
+  ShieldCheck,
+  TrendingUp,
+  Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  navIconButton,
+  navItem,
+  navItemActive,
+  navItemIcon,
+  navItemIconActive,
+  navItemIconIdle,
+  navItemIdle,
+  navSectionButton,
+} from "@/lib/ui-theme";
 
-const sections = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  description?: string;
+};
+
+type NavSection = {
+  key: string;
+  title: string;
+  /** Category icon — always different from child item icons */
+  icon: LucideIcon;
+  items: NavItem[];
+};
+
+const sections: NavSection[] = [
   {
     key: "insights",
     title: "Insights",
-    icon: Activity,
+    icon: BarChart3,
     items: [
-      { href: "/", label: "Dashboard", icon: Activity },
+      {
+        href: "/",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        description: "Network overview",
+      },
       {
         href: "/traffic-prediction",
         label: "Traffic Prediction",
         icon: TrendingUp,
+        description: "Forecast & trends",
       },
       {
         href: "/anomaly-detection",
         label: "Anomaly Detection",
-        icon: AlertTriangle,
+        icon: Radar,
+        description: "Threat analysis",
       },
     ],
   },
   {
     key: "lab",
     title: "Lab & Data",
-    icon: Box,
+    icon: FlaskConical,
     items: [
-      { href: "/simulation", label: "Simulation Lab", icon: Box },
-      { href: "/data-generation", label: "Data Generation", icon: Database },
+      {
+        href: "/simulation",
+        label: "Simulation Lab",
+        icon: Workflow,
+        description: "Mininet topology",
+      },
+      {
+        href: "/data-generation",
+        label: "Data Generation",
+        icon: Database,
+        description: "GNN datasets",
+      },
     ],
   },
   {
     key: "monitoring",
     title: "Monitoring",
-    icon: Bell,
-    items: [{ href: "/alerts", label: "Alerts", icon: Bell }],
+    icon: ShieldCheck,
+    items: [
+      {
+        href: "/alerts",
+        label: "Alerts",
+        icon: Bell,
+        description: "Incidents & notifications",
+      },
+    ],
   },
 ];
 
@@ -76,81 +126,55 @@ export function SidebarNav({
     lab: true,
     monitoring: true,
   });
-  const [darkMode, setDarkMode] = useState(true);
-
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      if (!document.documentElement.classList.contains("dark")) {
-        document.documentElement.classList.add("dark");
-      }
-      setDarkMode(document.documentElement.classList.contains("dark"));
-    }
-  }, []);
 
   const toggleSection = (key: string) => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const toggleTheme = () => {
-    if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("dark");
-      setDarkMode((prev) => !prev);
-    }
   };
 
   return (
     <>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen overflow-hidden border-r border-slate-800 bg-white/5 backdrop-blur-xl text-slate-100 transition-all duration-300 ease-out hidden md:flex flex-col",
+          "fixed left-0 top-0 z-40 hidden h-screen flex-col overflow-hidden border-r border-gray-200 bg-white text-gray-900 transition-all duration-300 ease-out md:flex",
           open ? "translate-x-0" : "-translate-x-full",
           compact ? "w-20" : "w-72",
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-4">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-600 text-white">
-              <UserCircle className="h-5 w-5 text-white" />
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 text-gray-900"
+              aria-hidden
+            >
+              <Network className="h-5 w-5 stroke-[1.75]" />
             </div>
             {!compact && (
-              <div>
-                <div className="text-sm font-semibold text-sky-100">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-900">
                   NetGuard
-                </div>
-                <div className="text-[11px] text-slate-300/70">
-                  Network operations
-                </div>
+                </p>
+                <p className="text-[11px] text-gray-500">Network operations</p>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onCompactToggle}
-              className="rounded-lg p-2 text-slate-100 hover:bg-slate-900 hover:text-sky-200 transition-colors"
-              aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {compact ? (
-                <PanelLeftOpen className="h-4 w-4 text-slate-100" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4 text-slate-100" />
-              )}
-            </button>
-            <button
-              onClick={onToggle}
-              className="rounded-lg p-2 text-slate-100 hover:bg-slate-900 hover:text-sky-200 transition-colors"
-              aria-label="Toggle sidebar"
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 text-slate-100 transition-transform duration-300",
-                  open ? "rotate-180" : "",
-                )}
-              />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onCompactToggle}
+            className={navIconButton}
+            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {compact ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-4">
+        <nav
+          className="flex-1 overflow-y-auto px-3 py-4"
+          aria-label="Main navigation"
+        >
           {sections.map((section) => {
             const SectionIcon = section.icon;
             const sectionExpanded = sectionsOpen[section.key];
@@ -159,79 +183,97 @@ export function SidebarNav({
                 <button
                   type="button"
                   onClick={() => toggleSection(section.key)}
-                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-slate-900"
+                  className={cn(navSectionButton, compact && "justify-center px-2")}
+                  aria-expanded={sectionExpanded}
                 >
-                  <SectionIcon className="h-4 w-4 shrink-0 text-sky-400" />
-                  {!compact && <span>{section.title}</span>}
-                  <ChevronRight
-                    className={cn(
-                      "ml-auto h-4 w-4 text-slate-400 transition-transform duration-300",
-                      sectionExpanded ? "rotate-90" : "",
-                    )}
+                  <SectionIcon
+                    className="h-4 w-4 shrink-0 stroke-[1.75] text-gray-400 transition-colors duration-200 group-hover:text-gray-600"
+                    aria-hidden
                   />
+                  {!compact && (
+                    <span className="font-medium tracking-tight">
+                      {section.title}
+                    </span>
+                  )}
+                  {!compact && (
+                    <ChevronRight
+                      className={cn(
+                        "ml-auto h-4 w-4 text-gray-400 transition-transform duration-300",
+                        sectionExpanded && "rotate-90",
+                      )}
+                      aria-hidden
+                    />
+                  )}
                 </button>
 
                 {sectionExpanded && (
-                  <div className="mt-3 space-y-2">
+                  <ul className="mt-2 space-y-0.5" role="list">
                     {section.items.map((item) => {
                       const ItemIcon = item.icon;
                       const isActive = pathname === item.href;
                       return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={cn(
-                            "group flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition-colors",
-                            isActive
-                              ? "bg-sky-700 text-slate-100 shadow-[0_0_0_1px_rgba(56,189,248,0.2)]"
-                              : "text-slate-100 hover:bg-slate-900 hover:text-sky-200",
-                          )}
-                        >
-                          <ItemIcon className="h-5 w-5 shrink-0 text-slate-100" />
-                          {!compact && <span>{item.label}</span>}
-                        </Link>
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            title={compact ? item.label : item.description}
+                            className={cn(
+                              navItem,
+                              isActive ? navItemActive : navItemIdle,
+                              compact && "justify-center px-2",
+                            )}
+                            aria-current={isActive ? "page" : undefined}
+                          >
+                            <ItemIcon
+                              className={cn(
+                                navItemIcon,
+                                "stroke-[1.75]",
+                                isActive
+                                  ? navItemIconActive
+                                  : navItemIconIdle,
+                              )}
+                              aria-hidden
+                            />
+                            {!compact && (
+                              <span className="truncate">{item.label}</span>
+                            )}
+                          </Link>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 )}
               </div>
             );
           })}
-        </div>
+        </nav>
 
-        <div className="border-t border-slate-800 px-3 py-4">
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-900"
-            >
-              {darkMode ? (
-                <Moon className="h-4 w-4 text-slate-100" />
-              ) : (
-                <Sun className="h-4 w-4 text-slate-100" />
+        <div className="border-t border-gray-200 px-3 py-4">
+          <Link
+            href="/support"
+            title={compact ? "Support" : "Help & documentation"}
+            className={cn(navItem, navItemIdle, compact && "justify-center px-2")}
+          >
+            <LifeBuoy
+              className={cn(
+                navItemIcon,
+                navItemIconIdle,
+                "stroke-[1.75]",
               )}
-              {!compact && <span>{darkMode ? "Dark mode" : "Light mode"}</span>}
-            </button>
-
-            <Link
-              href="/support"
-              className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-900"
-            >
-              <LifeBuoy className="h-4 w-4 text-slate-100" />
-              {!compact && <span>Support</span>}
-            </Link>
-          </div>
+              aria-hidden
+            />
+            {!compact && <span>Support</span>}
+          </Link>
         </div>
       </aside>
 
       {!open && (
         <button
+          type="button"
           onClick={onToggle}
-          className="fixed left-3 top-4 z-50 hidden md:flex h-11 w-11 items-center justify-center rounded-full border border-slate-800 bg-white/5 backdrop-blur-md text-slate-100 shadow-lg transition hover:bg-white/10"
+          className="fixed left-3 top-4 z-50 hidden h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition-all duration-200 ease-out hover:bg-[#f0f2f5] hover:text-gray-900 active:bg-[#e4e6eb] md:flex"
           aria-label="Open sidebar"
         >
-          <PanelLeftOpen className="h-5 w-5 text-slate-100" />
+          <PanelLeftOpen className="h-5 w-5" />
         </button>
       )}
     </>
