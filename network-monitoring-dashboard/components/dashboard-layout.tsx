@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SidebarNav } from "./sidebar-nav";
 import { TopNavbar } from "./top-navbar";
 import { AlertNotification } from "./alert-notification";
+import { PageTransition } from "./motion/page-transition";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -24,7 +25,7 @@ export function DashboardLayout({
   const [sidebarCompact, setSidebarCompact] = useState(false);
 
   return (
-    <div className="min-h-screen bg-transparent">
+    <div className="min-h-screen bg-gray-50">
 
       <SidebarNav
         open={sidebarOpen}
@@ -42,12 +43,12 @@ export function DashboardLayout({
       />
       <AlertNotification />
       <main
-        className="relative z-10 mt-16 p-4 md:p-6 space-y-8 transition-all duration-300"
+        className="relative z-10 mt-20 max-w-[1600px] space-y-8 p-4 transition-all duration-300 ease-out md:p-8"
         style={{
           marginLeft: sidebarOpen ? (sidebarCompact ? "5rem" : "18rem") : "0",
         }}
       >
-        {children}
+        <PageTransition>{children}</PageTransition>
       </main>
     </div>
   );

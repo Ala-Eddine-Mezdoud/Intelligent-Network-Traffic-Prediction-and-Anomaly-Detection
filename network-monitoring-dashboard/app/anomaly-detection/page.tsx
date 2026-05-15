@@ -22,7 +22,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getAnomalies } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { TableSkeleton } from "@/components/skeletons";
 import { SEVERITY_STYLES } from "@/lib/dashboard-theme";
+import {
+  pageSubtitle,
+  pageTitle,
+  tableCell,
+  tableHead,
+  tableRow,
+} from "@/lib/ui-theme";
+import { MetricCardSkeletonGrid } from "@/components/metric-card";
 
 interface Anomaly {
   id: string;
@@ -77,16 +87,19 @@ export default function AnomalyDetection() {
 
   const getStatusColor = (status: string) => {
     return status === "Ongoing"
-      ? "bg-slate-900/20 text-sky-300 border-sky-500/30"
-      : "bg-sky-950/20 text-sky-300 border-sky-500/30";
+      ? "bg-orange-500/10 text-orange-500 border-orange-500/30"
+      : "bg-green-500/10 text-green-500 border-green-500/30";
   };
 
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Loading...</div>
+        <div className="mb-6 space-y-2">
+          <div className="h-8 w-48 rounded-lg metric-shimmer bg-gray-100" />
+          <div className="h-4 w-72 rounded-lg metric-shimmer bg-gray-100" />
         </div>
+        <MetricCardSkeletonGrid count={3} className="mb-6" />
+        <TableSkeleton rows={8} columns={6} />
       </DashboardLayout>
     );
   }
@@ -96,10 +109,8 @@ export default function AnomalyDetection() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Anomaly Detection
-          </h1>
-          <p className="text-muted-foreground">
+          <h1 className={pageTitle}>Anomaly Detection</h1>
+          <p className={pageSubtitle}>
             Monitor and analyze detected network anomalies
           </p>
         </div>
@@ -107,7 +118,7 @@ export default function AnomalyDetection() {
         {/* Filters */}
         <div className="grid grid-cols-1 gap-3 md:gap-4 md:grid-cols-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
             <Input
               placeholder="Search by IP or threat type..."
               value={searchTerm}
@@ -129,7 +140,7 @@ export default function AnomalyDetection() {
         </div>
 
         {/* Anomalies Table */}
-        <Card className="border-border bg-white/5 backdrop-blur-xl supports-backdrop-filter:bg-white/5">
+        <Card>
           <CardHeader>
             <CardTitle>
               Detected Anomalies ({filteredAnomalies.length})
@@ -139,43 +150,31 @@ export default function AnomalyDetection() {
             <div className="overflow-x-auto -mx-4 md:mx-0">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-border hover:bg-transparent whitespace-nowrap">
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                      Timestamp
-                    </TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                      Source IP
-                    </TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                      Dest IP
-                    </TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                      Threat
-                    </TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                      Severity
-                    </TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
-                      Status
-                    </TableHead>
+                  <TableRow className="border-gray-200 hover:bg-transparent whitespace-nowrap">
+                    <TableHead className={tableHead}>Timestamp</TableHead>
+                    <TableHead className={tableHead}>Source IP</TableHead>
+                    <TableHead className={tableHead}>Dest IP</TableHead>
+                    <TableHead className={tableHead}>Threat</TableHead>
+                    <TableHead className={tableHead}>Severity</TableHead>
+                    <TableHead className={tableHead}>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAnomalies.map((anomaly) => (
                     <TableRow
                       key={anomaly.id}
-                      className="border-border hover:bg-muted/50 cursor-pointer transition-colors whitespace-nowrap"
+                      className={cn(tableRow, "cursor-pointer whitespace-nowrap")}
                     >
-                      <TableCell className="text-foreground font-mono text-xs md:text-sm px-2 md:px-4">
+                      <TableCell className={cn(tableCell, "font-mono")}>
                         {anomaly.timestamp}
                       </TableCell>
-                      <TableCell className="text-foreground font-mono text-xs md:text-sm px-2 md:px-4">
+                      <TableCell className={cn(tableCell, "font-mono")}>
                         {anomaly.source_ip}
                       </TableCell>
-                      <TableCell className="text-foreground font-mono text-xs md:text-sm px-2 md:px-4">
+                      <TableCell className={cn(tableCell, "font-mono")}>
                         {anomaly.dest_ip}
                       </TableCell>
-                      <TableCell className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      <TableCell className={tableCell}>
                         {anomaly.threat_type}
                       </TableCell>
                       <TableCell className="text-xs md:text-sm px-2 md:px-4">
@@ -201,7 +200,7 @@ export default function AnomalyDetection() {
             </div>
             {filteredAnomalies.length === 0 && (
               <div className="py-8 text-center">
-                <p className="text-muted-foreground">
+                <p className="text-gray-500">
                   No anomalies match your search criteria
                 </p>
               </div>

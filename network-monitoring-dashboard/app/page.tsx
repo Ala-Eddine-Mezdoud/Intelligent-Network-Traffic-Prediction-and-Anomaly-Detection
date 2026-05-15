@@ -35,6 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { MetricCard } from "@/components/metric-card";
+import { DashboardPageSkeleton } from "@/components/skeletons";
 import {
   getCurrentMetrics,
   getHistoricalTraffic,
@@ -48,6 +49,19 @@ import {
 } from "@/lib/api";
 import { DASHBOARD_COLORS, STATE_COLORS } from "@/lib/dashboard-theme";
 import { TrafficPredictionChart } from "@/components/traffic-prediction-chart";
+import {
+  chartTooltipStyle,
+  idleDot,
+  mutedBadge,
+  pageSection,
+  pageSubtitle,
+  pageTitle,
+  primaryButton,
+  loadingState,
+  runningDot,
+  statusBadge,
+} from "@/lib/ui-theme";
+import { cn } from "@/lib/utils";
 
 // Redundant definitions removed - using centralized lib/dashboard-theme.ts
 
@@ -263,9 +277,7 @@ export default function Dashboard() {
   if (isLoading || !metrics || !systemStatus) {
     return (
       <DashboardLayout navbarStatus="healthy">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Loading...</div>
-        </div>
+        <DashboardPageSkeleton />
       </DashboardLayout>
     );
   }
@@ -276,13 +288,13 @@ export default function Dashboard() {
       breadcrumbs={[{ label: "Dashboard" }, { label: "Network Overview" }]}
     >
       {/* ── Simulation Control Bar ─────────────────────────────────── */}
-      <div className="mb-4 rounded-xl border border-border bg-card/60 backdrop-blur p-4">
+      <div className={cn(pageSection, "mb-4")}>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4 flex-wrap">
             {/* Running indicator */}
             <div className="flex items-center gap-2">
               <span
-                className={`w-2.5 h-2.5 rounded-full ${isRunning ? "bg-sky-400 animate-pulse" : "bg-zinc-600"}`}
+                className={cn("h-2.5 w-2.5 rounded-full", isRunning ? runningDot : idleDot)}
               />
               <span className="text-sm font-medium">
                 {isRunning ? "Simulation Running" : "Simulation Idle"}
@@ -291,7 +303,7 @@ export default function Dashboard() {
 
             {/* GNN status */}
             {gnnRunning && (
-              <div className="flex items-center gap-1.5 text-xs text-sky-300 bg-sky-950/20 border border-sky-500/30 rounded-full px-2.5 py-1">
+              <div className={cn(mutedBadge, statusBadge.healthy)}>
                 <Network className="h-3 w-3" />
                 GNN active · {predsMade} predictions
               </div>
@@ -299,19 +311,19 @@ export default function Dashboard() {
 
             {/* Next attack countdown */}
             {isRunning && nextAttack && nextAttackIn != null && (
-              <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950/20 border border-slate-700/20 rounded-full px-2.5 py-1">
+              <div className={mutedBadge}>
                 <Clock className="h-3 w-3" />
                 Next: <span className="font-semibold ml-1">{nextAttack}</span>
-                <span className="ml-1 text-zinc-400">in {nextAttackIn}s</span>
+                <span className="ml-1 text-gray-400">in {nextAttackIn}s</span>
               </div>
             )}
 
             {/* Last attack */}
             {lastAttack && (
-              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+              <div className="flex items-center gap-1.5 text-xs text-gray-400">
                 <ChevronRight className="h-3 w-3" />
                 Last attack:{" "}
-                <span className="text-zinc-200 font-medium ml-1">
+                <span className="font-medium text-gray-700 ml-1">
                   {lastAttack.name}
                 </span>
               </div>
@@ -326,7 +338,7 @@ export default function Dashboard() {
                 disabled={isPipelineStopping}
                 variant="outline"
                 size="sm"
-                className="border-sky-500/50 text-sky-300 hover:bg-slate-900/30"
+                className="border-gray-200 text-gray-700 hover:bg-gray-50"
               >
                 {isPipelineStopping ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -340,7 +352,7 @@ export default function Dashboard() {
                 onClick={handleStartPipeline}
                 disabled={isPipelineStarting}
                 size="sm"
-                className="bg-linear-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-semibold shadow-lg shadow-sky-500/20"
+                className={primaryButton}
               >
                 {isPipelineStarting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -356,13 +368,13 @@ export default function Dashboard() {
         {/* Active operational anomalies row */}
         {activeOpAnomalies.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-2">
-            <span className="text-xs text-zinc-500 self-center">
+            <span className="text-xs text-gray-500 self-center">
               Active anomalies:
             </span>
             {activeOpAnomalies.map((a, i) => (
               <span
                 key={i}
-                className="text-xs bg-zinc-800 border border-border rounded-full px-2.5 py-0.5 text-zinc-300"
+                className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600"
               >
                 {a.node} · {a.profile} · {a.duration_seconds}s
               </span>
@@ -394,7 +406,7 @@ export default function Dashboard() {
               {anomalyNodes.slice(0, 6).map((n) => (
                 <span
                   key={n.node}
-                  className="text-xs font-mono bg-black/20 border border-current/20 rounded px-2 py-0.5"
+                  className="rounded border border-current/20 bg-gray-100 px-2 py-0.5 font-mono text-xs"
                 >
                   {n.node}
                 </span>
@@ -406,13 +418,13 @@ export default function Dashboard() {
 
       {/* ── GNN Anomaly History Panel ──────────────────────────────── */}
       {anomalyHistory.length > 0 && (
-        <div className="mb-4 rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-4">
+        <div className={cn(pageSection, "mb-4")}>
           <div className="flex items-center gap-2 mb-3">
-            <Siren className="h-4 w-4 text-sky-400" />
-            <h3 className="text-sm font-semibold text-zinc-200">
+            <Siren className="h-4 w-4 text-orange-500" />
+            <h3 className="text-sm font-semibold text-gray-900">
               GNN Anomaly History
             </h3>
-            <span className="ml-auto text-xs text-zinc-500">
+            <span className="ml-auto text-xs text-gray-500">
               {anomalyHistory.length} events this session
             </span>
           </div>
@@ -420,27 +432,27 @@ export default function Dashboard() {
             {anomalyHistory.slice(0, 20).map((event: any, i: number) => {
               const stateClass =
                 STATE_COLORS[event.state] ??
-                "text-sky-300 bg-sky-950/30 border-sky-500/40";
+                "text-orange-500 bg-orange-500/10 border-orange-500/30";
               const textColor = stateClass.split(" ")[0];
               return (
                 <div
                   key={i}
-                  className="flex items-center gap-3 text-xs bg-zinc-950/70 border border-zinc-800/80 rounded-lg px-3 py-2"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"
                 >
-                  <span className="text-zinc-500 font-mono shrink-0 w-16">
+                  <span className="text-gray-500 font-mono shrink-0 w-16">
                     {event.timestamp?.split(" ")[1] ?? "—"}
                   </span>
                   <span className={`font-semibold shrink-0 ${textColor}`}>
                     {event.state.replace(/_/g, " ")}
                   </span>
-                  <span className="text-zinc-500 shrink-0">
+                  <span className="text-gray-500 shrink-0">
                     {(event.confidence * 100).toFixed(0)}%
                   </span>
-                  <span className="text-zinc-600 truncate flex-1">
+                  <span className="text-gray-600 truncate flex-1">
                     {event.anomaly_nodes?.map((n: any) => n.node).join(", ") ||
                       "—"}
                   </span>
-                  <span className="text-zinc-500 font-mono shrink-0">
+                  <span className="text-gray-500 font-mono shrink-0">
                     {event.total_traffic_mbps} Mbps
                   </span>
                 </div>
@@ -452,10 +464,8 @@ export default function Dashboard() {
 
       {/* ── Page Title ─────────────────────────────────────────────── */}
       <div className="mb-4">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Network Overview
-        </h2>
-        <p className="text-muted-foreground text-sm">
+        <h2 className={pageTitle}>Network Overview</h2>
+        <p className={pageSubtitle}>
           Real-time traffic monitoring and GNN anomaly detection · refreshes
           every 8s
         </p>
@@ -464,6 +474,7 @@ export default function Dashboard() {
       {/* ── Metric Cards ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4 mb-4">
         <MetricCard
+          index={0}
           title="Current Traffic"
           value={metrics.current_traffic_mbps}
           unit="Mbps"
@@ -474,9 +485,10 @@ export default function Dashboard() {
           variant="traffic"
           description="Network throughput capacity"
           sparklineData={trafficSparkline}
-       
+          isLive
         />
         <MetricCard
+          index={1}
           title="Active Connections"
           value={metrics.active_connections}
           icon={<Activity className="h-5 w-5" />}
@@ -484,9 +496,10 @@ export default function Dashboard() {
           health="healthy"
           variant="connections"
           description="Concurrent session count"
-         
+          isLive
         />
         <MetricCard
+          index={2}
           title="Anomaly Score"
           value={metrics.anomaly_score_percent}
           unit="%"
@@ -501,9 +514,10 @@ export default function Dashboard() {
           }
           variant="anomaly"
           description="AI detection confidence"
-         
+          isLive
         />
         <MetricCard
+          index={3}
           title="Alerts Today"
           value={metrics.alerts_today}
           icon={<TrendingUp className="h-5 w-5" />}
@@ -517,7 +531,7 @@ export default function Dashboard() {
           }
           variant="alerts"
           description="Security incident volume"
-
+          isLive
         />
       </div>
 
@@ -559,7 +573,7 @@ export default function Dashboard() {
       {/* ── Charts Row ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
         {/* Protocol Distribution */}
-        <Card className="border-border bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/40">
+        <Card>
           <CardHeader>
             <CardTitle>Traffic by Protocol</CardTitle>
           </CardHeader>
@@ -573,7 +587,7 @@ export default function Dashboard() {
                   labelLine={false}
                   label={({ name, value }) => `${name} ${value}%`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill={DASHBOARD_COLORS[0]}
                   dataKey="value"
                 >
                   {protocolData.map((_, index) => (
@@ -583,27 +597,20 @@ export default function Dashboard() {
                     />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1a1a2e",
-                    border: "1px solid #16213e",
-                    borderRadius: "8px",
-                    color: "#ffffff",
-                  }}
-                />
+                <Tooltip contentStyle={chartTooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* System Status */}
-        <Card className="border-border bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/40">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
               System Status
               {simStatus?.gnn?.status?.running && (
-                <span className="text-[11px] font-normal text-sky-300 bg-sky-950/30 border border-sky-500/30 rounded-full px-2 py-0.5 ml-auto">
+                <span className={cn(mutedBadge, statusBadge.healthy, "ml-auto font-normal")}>
                   GNN active · {windowState}
                 </span>
               )}
@@ -613,29 +620,27 @@ export default function Dashboard() {
             <StatusBar
               label="Network Health"
               value={systemStatus.network_health_percent}
-              color="bg-sky-500"
-              textColor="text-sky-500"
+              color="bg-green-500"
+              textColor="text-green-500"
             />
             <StatusBar
               label="Anomaly Detection"
               value={systemStatus.anomaly_detection_percent}
-              color="bg-accent"
-              textColor="text-accent"
+              color="bg-orange-500"
+              textColor="text-orange-500"
             />
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Threat Level
-                </span>
+                <span className="text-sm text-gray-600">Threat Level</span>
                 <span
-                  className={`text-sm font-semibold ${systemStatus.threat_level === "Low" ? "text-sky-400" : systemStatus.threat_level === "Medium" ? "text-sky-300" : "text-sky-300"}`}
+                  className={`text-sm font-semibold ${systemStatus.threat_level === "Low" ? "text-green-500" : systemStatus.threat_level === "Medium" ? "text-orange-500" : "text-red-500"}`}
                 >
                   {systemStatus.threat_level}
                 </span>
               </div>
               <div className="h-2 rounded-full bg-muted">
                 <div
-                  className={`h-full rounded-full ${systemStatus.threat_level === "Low" ? "bg-sky-500" : systemStatus.threat_level === "Medium" ? "bg-sky-500" : "bg-sky-500"}`}
+                  className={`h-full rounded-full ${systemStatus.threat_level === "Low" ? "bg-green-500" : systemStatus.threat_level === "Medium" ? "bg-orange-500" : "bg-red-500"}`}
                   style={{
                     width:
                       systemStatus.threat_level === "Low"
@@ -648,24 +653,24 @@ export default function Dashboard() {
               </div>
             </div>
             {gnnRunning && gnnPreds && (
-              <div className="pt-2 border-t border-border/50 text-xs text-zinc-500 space-y-1">
+              <div className="pt-2 border-t border-border/50 text-xs text-gray-500 space-y-1">
                 <div className="flex justify-between">
                   <span>GNN window state</span>
                   <span
-                    className={`font-medium ${isAnomaly ? "text-sky-300" : "text-sky-300"}`}
+                    className={`font-medium ${isAnomaly ? "text-red-500" : "text-green-500"}`}
                   >
                     {windowState}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Anomaly nodes</span>
-                  <span className="text-zinc-300">
+                  <span className="text-gray-600">
                     {gnnPreds.anomaly_count} / {gnnPreds.total_nodes}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Last inference</span>
-                  <span className="text-zinc-300 font-mono">
+                  <span className="font-mono text-gray-600">
                     {gnnPreds.timestamp?.split(" ")[1] ?? "–"}
                   </span>
                 </div>
@@ -692,7 +697,7 @@ function StatusBar({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{label}</span>
+        <span className="text-sm text-gray-600">{label}</span>
         <span className={`text-sm font-semibold ${textColor}`}>{value}%</span>
       </div>
       <div className="h-2 rounded-full bg-muted">

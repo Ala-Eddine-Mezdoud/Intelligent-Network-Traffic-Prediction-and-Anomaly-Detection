@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import {
   ComposedChart,
   Line,
@@ -12,12 +13,17 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CHART_STROKE, chartTooltipStyle, mutedBadge } from "@/lib/ui-theme";
+import { cn } from "@/lib/utils";
+import { ChartSkeleton } from "@/components/skeletons";
+import { hoverLift, springSoft } from "@/lib/motion";
 
 interface TrafficPredictionChartProps {
   data: any[];
   title?: string;
   height?: number;
   showLiveBadge?: boolean;
+  isLoading?: boolean;
 }
 
 export function TrafficPredictionChart({
@@ -25,107 +31,90 @@ export function TrafficPredictionChart({
   title = "Traffic Prediction",
   height = 380,
   showLiveBadge = false,
+  isLoading = false,
 }: TrafficPredictionChartProps) {
+  if (isLoading) {
+    return <ChartSkeleton height={height} className="mb-4" />;
+  }
+
   return (
-    <Card className="border-border bg-white/5 backdrop-blur-xl supports-backdrop-filter:bg-white/5">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {title}
-          {showLiveBadge && (
-            <span className="text-[11px] font-normal text-sky-300 bg-sky-950/30 border border-sky-500/30 rounded-full px-2 py-0.5">
-              Live Forecast
-            </span>
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={springSoft}
+      whileHover={hoverLift}
+      className="mb-4"
+    >
+      <Card className="overflow-hidden transition-shadow duration-500 hover:shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {title}
+            {showLiveBadge && (
+              <span className={cn(mutedBadge, "font-normal text-green-600")}>
+                <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-green-500 live-pulse" />
+                Live forecast
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex h-48 flex-col items-center justify-center gap-2"
+            >
+              <p className="text-lg font-medium text-gray-900">No data available</p>
+              <p className="text-sm text-gray-500">
+                Start a simulation to see traffic predictions
+              </p>
+            </motion.div>
+          ) : (
+            <ResponsiveContainer width="100%" height={height}>
+              <ComposedChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_STROKE.grid} />
+                <XAxis
+                  dataKey="time"
+                  stroke={CHART_STROKE.axis}
+                  tick={{ fill: CHART_STROKE.axis, fontSize: 11 }}
+                />
+                <YAxis
+                  stroke={CHART_STROKE.axis}
+                  tick={{ fill: CHART_STROKE.axis, fontSize: 11 }}
+                />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12, color: "#6b7280" }} />
+                <Area
+                  type="monotone"
+                  dataKey="upper"
+                  fill={CHART_STROKE.confidence}
+                  stroke="none"
+                  name="Confidence range"
+                  legendType="none"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="historical"
+                  stroke={CHART_STROKE.historical}
+                  dot={{ fill: CHART_STROKE.historical, r: 2 }}
+                  activeDot={{ r: 4 }}
+                  strokeWidth={2}
+                  name="Historical"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="predicted"
+                  stroke={CHART_STROKE.predicted}
+                  strokeDasharray="6 4"
+                  dot={false}
+                  strokeWidth={2}
+                  name="Predicted"
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-2">
-            <p className="text-muted-foreground text-lg font-medium">
-              No Data Available
-            </p>
-            <p className="text-muted-foreground text-sm">
-              Start a simulation to see traffic predictions
-            </p>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={height}>
-            <ComposedChart data={data}>
-              <defs>
-                <linearGradient id="colorUpper" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.2} />
-                  <stop offset="50%" stopColor="#818cf8" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1} />
-                </linearGradient>
-                <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#67e8f9" stopOpacity={0.8} />
-                  <stop offset="100%" stopColor="#67e8f9" stopOpacity={0.3} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
-              <XAxis
-                dataKey="time"
-                stroke="#ffffff80"
-                style={{ fontSize: "11px" }}
-              />
-              <YAxis stroke="#ffffff80" style={{ fontSize: "11px" }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "rgba(15, 23, 42, 0.9)",
-                  backdropFilter: "blur(8px)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                  borderRadius: "12px",
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-                }}
-                labelStyle={{ color: "#e2e8f0", fontWeight: "600" }}
-                itemStyle={{ color: "#e2e8f0" }}
-              />
-              <Legend
-                wrapperStyle={{
-                  color: "#e2e8f0",
-                  fontSize: "12px",
-                  paddingTop: "20px",
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="upper"
-                fill="url(#colorUpper)"
-                stroke="none"
-                name="Confidence Range"
-                legendType="none"
-              />
-              <Line
-                type="monotone"
-                dataKey="lower"
-                stroke="none"
-                fill="none"
-                dot={false}
-                legendType="none"
-              />
-              <Line
-                type="monotone"
-                dataKey="historical"
-                stroke="#a78bfa"
-                dot={{ fill: "#a78bfa", r: 3 }}
-                activeDot={{ r: 5 }}
-                strokeWidth={2.5}
-                name="Historical (Mbps)"
-              />
-              <Line
-                type="monotone"
-                dataKey="predicted"
-                stroke="#67e8f9"
-                strokeDasharray="5 5"
-                dot={{ fill: "#67e8f9", r: 3 }}
-                activeDot={{ r: 5 }}
-                strokeWidth={2.5}
-                name="Predicted (Mbps)"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
