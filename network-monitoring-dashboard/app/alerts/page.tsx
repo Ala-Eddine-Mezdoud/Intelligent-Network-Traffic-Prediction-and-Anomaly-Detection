@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { Activity, useEffect, useState } from "react";
+import { AlertTriangle, ChevronRight, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/dashboard-layout";
@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { showAlertToast } from "@/components/alert-notification";
 import { getAlerts, getAlertStats } from "@/lib/api";
+import { MetricCard } from "@/components/metric-card";
+import { SEVERITY_STYLES } from "@/lib/dashboard-theme";
 
 interface Alert {
   id: string;
@@ -76,29 +78,20 @@ export default function Alerts() {
   }, []);
 
   const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "High":
-        return "bg-red-500/20 text-red-300 border-red-500/30";
-      case "Medium":
-        return "bg-yellow-500/20 text-yellow-300 border-yellow-500/30";
-      case "Low":
-        return "bg-blue-500/20 text-blue-300 border-blue-500/30";
-      default:
-        return "bg-gray-500/20 text-gray-300";
-    }
+    const s = severity.toLowerCase();
+    const config = SEVERITY_STYLES[s] || SEVERITY_STYLES.default;
+    return `${config.bg} ${config.text} ${config.border}`;
   };
 
   const getSeverityBorderColor = (severity: string) => {
-    switch (severity) {
-      case "High":
-        return "border-red-500/30 hover:border-red-500/50";
-      case "Medium":
-        return "border-yellow-500/30 hover:border-yellow-500/50";
-      case "Low":
-        return "border-blue-500/30 hover:border-blue-500/50";
-      default:
-        return "border-gray-500/30";
-    }
+    const s = severity.toLowerCase();
+    const config = SEVERITY_STYLES[s] || SEVERITY_STYLES.default;
+    return `${config.border} hover:shadow-${s === 'critical' || s === 'high' ? 'red' : s === 'warning' || s === 'medium' ? 'orange' : 'green'}-500/10`;
+  };
+
+  const getSeverityTextColor = (severity: string) => {
+    const s = severity.toLowerCase();
+    return (SEVERITY_STYLES[s] || SEVERITY_STYLES.default).text;
   };
 
   if (isLoading || !stats) {
@@ -113,7 +106,7 @@ export default function Alerts() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+    <div className="relative z-10 space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -127,30 +120,46 @@ export default function Alerts() {
           </Button>
         </div>
 
-        {/* Alert Statistics */}
-        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
-          <Card className="border-border bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/40 p-4">
-            <div className="text-sm text-muted-foreground mb-1">
-              Total Alerts
-            </div>
-            <div className="text-3xl font-bold text-foreground">
-              {stats.total}
-            </div>
-          </Card>
-          <Card className="border-border bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/40 p-4">
-            <div className="text-sm text-muted-foreground mb-1">Critical</div>
-            <div className="text-3xl font-bold text-red-500">
-              {stats.critical}
-            </div>
-          </Card>
-          <Card className="border-border bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/40 p-4">
-            <div className="text-sm text-muted-foreground mb-1">Warnings</div>
-            <div className="text-3xl font-bold text-yellow-500">
-              {stats.warnings}
-            </div>
-          </Card>
-        </div>
 
+      {/* ── Alert Statistics ───────────────────────────────────────────── */}
+{/* ── Alert Statistics ───────────────────────────────────────────── */}
+<div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3 mb-4">
+  <MetricCard
+    title="Total Alerts"
+    value={stats.total}
+    icon={<Activity className="h-5 w-5" />}
+    trend={stats.total > 20 ? "up" : "stable"}
+    health={
+      stats.total > 50
+        ? "critical"
+        : stats.total > 20
+          ? "warning"
+          : "healthy"
+    }
+    variant="traffic"
+    description="Overall detected incidents"
+  />
+
+  <MetricCard
+    title="Critical Alerts"
+    value={stats.critical}
+    icon={<AlertTriangle className="h-5 w-5" />}
+    trend={stats.critical > 0 ? "up" : "stable"}
+    health="critical"
+    variant="critical"
+    description="High severity security events"
+  />
+
+  <MetricCard
+    title="Warnings"
+    value={stats.warnings}
+    icon={<TrendingUp className="h-5 w-5" />}
+    trend={stats.warnings > 5 ? "up" : "stable"}
+    health="warning"
+    variant="warning"
+    description="Medium severity notifications"
+  />
+</div>
         {/* Alerts List */}
         <div className="space-y-2 md:space-y-3">
           {alerts.map((alert) => (
@@ -167,7 +176,9 @@ export default function Alerts() {
                     >
                       {alert.severity}
                     </Badge>
-                    <h3 className="text-lg font-semibold text-foreground">
+                    <h3
+                      className={`text-lg font-semibold ${getSeverityTextColor(alert.severity)}`}
+                    >
                       {alert.title}
                     </h3>
                   </div>

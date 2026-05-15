@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { Search } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -9,19 +9,20 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { DashboardLayout } from '@/components/dashboard-layout';
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { DashboardLayout } from "@/components/dashboard-layout";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { getAnomalies } from '@/lib/api';
+} from "@/components/ui/select";
+import { getAnomalies } from "@/lib/api";
+import { SEVERITY_STYLES } from "@/lib/dashboard-theme";
 
 interface Anomaly {
   id: string;
@@ -35,8 +36,8 @@ interface Anomaly {
 
 export default function AnomalyDetection() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function AnomalyDetection() {
           setAnomalies(res.anomalies);
         }
       } catch (error) {
-        console.error('Failed to fetch anomalies:', error);
+        console.error("Failed to fetch anomalies:", error);
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -69,22 +70,15 @@ export default function AnomalyDetection() {
   const filteredAnomalies = anomalies;
 
   const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'High':
-        return 'bg-red-500/20 text-red-300 border-red-500/30';
-      case 'Medium':
-        return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
-      case 'Low':
-        return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-      default:
-        return 'bg-gray-500/20 text-gray-300';
-    }
+    const s = severity.toLowerCase();
+    const config = SEVERITY_STYLES[s] || SEVERITY_STYLES.default;
+    return `${config.bg} ${config.text} ${config.border}`;
   };
 
   const getStatusColor = (status: string) => {
-    return status === 'Ongoing'
-      ? 'bg-red-500/20 text-red-300 border-red-500/30'
-      : 'bg-green-500/20 text-green-300 border-green-500/30';
+    return status === "Ongoing"
+      ? "bg-slate-900/20 text-sky-300 border-sky-500/30"
+      : "bg-sky-950/20 text-sky-300 border-sky-500/30";
   };
 
   if (isLoading) {
@@ -135,21 +129,35 @@ export default function AnomalyDetection() {
         </div>
 
         {/* Anomalies Table */}
-        <Card className="border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/40">
+        <Card className="border-border bg-white/5 backdrop-blur-xl supports-backdrop-filter:bg-white/5">
           <CardHeader>
-            <CardTitle>Detected Anomalies ({filteredAnomalies.length})</CardTitle>
+            <CardTitle>
+              Detected Anomalies ({filteredAnomalies.length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto -mx-4 md:mx-0">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent whitespace-nowrap">
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">Timestamp</TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">Source IP</TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">Dest IP</TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">Threat</TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">Severity</TableHead>
-                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">Status</TableHead>
+                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      Timestamp
+                    </TableHead>
+                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      Source IP
+                    </TableHead>
+                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      Dest IP
+                    </TableHead>
+                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      Threat
+                    </TableHead>
+                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      Severity
+                    </TableHead>
+                    <TableHead className="text-foreground text-xs md:text-sm px-2 md:px-4">
+                      Status
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
