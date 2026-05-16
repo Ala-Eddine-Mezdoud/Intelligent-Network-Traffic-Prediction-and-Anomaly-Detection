@@ -1,10 +1,11 @@
 "use client";
 
-import { CheckCircle, AlertCircle, Clock, Bell } from "lucide-react";
+import { CheckCircle, AlertCircle, Clock, Bell, Moon, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { getAlertStats } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,16 @@ export function TopNavbar({
   sidebarCompact = false,
 }: TopNavbarProps) {
   const [alertCount, setAlertCount] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<string>('');
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    const tick = () => setCurrentTime(new Date().toLocaleTimeString());
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const getStatusStyles = () => {
     switch (status) {
@@ -83,7 +93,7 @@ export function TopNavbar({
 
   return (
     <header
-      className="fixed top-0 right-0 z-40 flex h-20 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm transition-all duration-300 md:px-8"
+      className="fixed top-0 right-0 z-40 flex h-20 items-center justify-between border-b border-border bg-card px-4 shadow-sm transition-all duration-300 md:px-8"
       style={{
         left: sidebarOpen ? (sidebarCompact ? "5rem" : "18rem") : "0",
       }}
@@ -91,12 +101,12 @@ export function TopNavbar({
       <nav className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
         {breadcrumbs.map((crumb, index) => (
           <div key={index} className="flex items-center gap-2">
-            {index > 0 && <span className="text-gray-400">/</span>}
+            {index > 0 && <span className="text-muted-foreground">/</span>}
             <span
               className={
                 index === breadcrumbs.length - 1
-                  ? "font-medium text-gray-900"
-                  : "text-gray-500"
+                  ? "font-medium text-foreground"
+                  : "text-muted-foreground"
               }
             >
               {crumb.label}
@@ -123,15 +133,27 @@ export function TopNavbar({
           </span>
         </div>
 
-        <div className="hidden items-center gap-2 text-sm text-gray-500 lg:flex">
-          <Clock className="h-4 w-4" />
-          <span>{new Date().toLocaleTimeString()}</span>
-        </div>
+        {currentTime && (
+          <div className="hidden items-center gap-2 text-sm text-muted-foreground lg:flex">
+            <Clock className="h-4 w-4" />
+            <span suppressHydrationWarning>{currentTime}</span>
+          </div>
+        )}
 
         <Button
           variant="ghost"
           size="sm"
-          className="relative text-gray-600 transition-all duration-200 ease-out hover:bg-[#f0f2f5] hover:text-gray-900 active:bg-[#e4e6eb]"
+          className="relative text-muted-foreground hover:text-foreground hover:bg-accent"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="relative text-muted-foreground hover:text-foreground hover:bg-accent"
           onClick={() => router.push("/alerts")}
           aria-label="Open alerts"
         >
@@ -139,7 +161,7 @@ export function TopNavbar({
           <Badge
             className={cn(
               "absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center px-1.5 p-0 text-xs text-white",
-              alertCount > 0 ? "bg-red-500" : "bg-gray-400",
+              alertCount > 0 ? "bg-red-500" : "bg-muted-foreground",
             )}
             aria-live="polite"
           >

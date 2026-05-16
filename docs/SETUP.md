@@ -1,219 +1,186 @@
 # Setup Guide
 
-This guide explains how to run the Network Traffic Prediction & Anomaly Detection system.
+## Prerequisites
 
-## Phase-1 (Mininet + Dashboard) Quick Start
+| Requirement | Version | Install |
+|-------------|---------|---------|
+| Linux (Ubuntu 20.04+) | — | VM or bare metal |
+| Mininet | 2.3+ | `sudo apt-get install mininet` |
+| Open vSwitch | — | `sudo apt-get install openvswitch-switch` |
+| iperf3 | — | `sudo apt-get install iperf3` |
+| tshark | — | `sudo apt-get install tshark` |
+| Python | 3.10+ | system or Anaconda |
+| Ryu SDN controller | — | `pip install ryu` |
+| Node.js | 20+ | `curl -fsSL https://deb.nodesource.com/setup_20.x \| sudo bash - && sudo apt-get install nodejs` |
 
-Use this mode for the integrated SDN simulation, realtime inference pipeline, and dashboard UI.
+---
 
-### Terminal 1: Mininet backend (Flask + topology)
+## First-Time Setup
+
+### 1. Install Python dependencies
 
 ```bash
-cd /home/mininet/projects/Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection/mininetDashboard
-sudo -E env PYTHONPATH="$HOME/.local/lib/python3.8/site-packages" /usr/bin/python3 sdn_dashboard.py
+cd mininetDashboard
+pip install -r requirements.txt
 ```
 
-### Terminal 2: Ryu controller
+Key packages: `Flask`, `torch`, `torch-geometric`, `scikit-learn`, `numpy`, `requests`, `scapy`
+
+### 2. Install dashboard dependencies
+
+```bash
+cd network-monitoring-dashboard
+npm install
+```
+
+If the build fails with a missing native binary error, run:
+
+```bash
+# Fix @tailwindcss/oxide native binary (required on Linux)
+cp node_modules/@tailwindcss/oxide-linux-x64-gnu/tailwindcss-oxide.linux-x64-gnu.node \
+   node_modules/@tailwindcss/oxide/tailwindcss-oxide.linux-x64-gnu.node
+
+# Fix lightningcss native binary if missing
+npm install lightningcss-linux-x64-gnu --legacy-peer-deps
+```
+
+### 3. Verify Ryu is available
+
+```bash
+ryu-manager --version
+```
+
+---
+
+## Running the System
+
+Three terminals are required. All run on the **Linux VM**, not inside Mininet namespaces.
+
+### Terminal 1 — Ryu SDN Controller
 
 ```bash
 ryu-manager ryu.app.simple_switch_13 ryu.app.ofctl_rest
 ```
 
-### Terminal 3: Next.js monitoring dashboard
+Leave this running. Ryu listens on port 6633 (OpenFlow) and port 8080 (REST).
+
+### Terminal 2 — Flask Backend + Mininet
 
 ```bash
-cd /home/mininet/projects/Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection/network-monitoring-dashboard
-export PATH="$HOME/.local/node20/bin:$PATH"
-npm install
-npm run dev
+cd mininetDashboard
+sudo -E env PYTHONPATH="$HOME/.local/lib/python3.10/site-packages" /usr/bin/python3 sdn_dashboard.py
 ```
 
-### Verify backend readiness
+Adjust `python3.10` to match your installed Python version. The `sudo -E` preserves environment variables so pip-installed packages are found.
+
+Mininet takes 10–30 seconds to initialize. Check readiness:
 
 ```bash
 curl -s http://127.0.0.1:5000/api/topology
 ```
 
-If topology returns `{"error":"Mininet is still starting"}`, wait until it returns full topology JSON.
+When topology returns a JSON object with nodes and links (not `{"error":"Mininet is still starting"}`), the backend is ready.
 
-### Start realtime pipeline manually
+### Terminal 3 — Next.js Dashboard
 
 ```bash
+cd network-monitoring-dashboard
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Starting a Simulation
+
+From the dashboard Overview page, click **Start Simulation**.
+
+Or via API:
+
+```bash
+# Start simulation (30-second pipeline cycle)
 curl -X POST http://127.0.0.1:5000/api/pipeline/start \
-    -H "Content-Type: application/json" \
-    -d '{"interval_seconds":30}'
-```
+  -H "Content-Type: application/json" \
+  -d '{"interval_seconds": 30}'
 
-Check status:
-
-```bash
+# Check status
 curl -s http://127.0.0.1:5000/api/pipeline/status
+
+# Stop simulation
+curl -X POST http://127.0.0.1:5000/api/pipeline/stop
 ```
 
-`"running":true` means Lab is active.
-
-## Prerequisites
-
-- Python 3.10+ with Anaconda/conda
-- Node.js 18+ with npm/pnpm
-- Git
-
----
-
-## Backend (FastAPI)
-
-The backend provides ML-powered APIs for traffic forecasting and anomaly detection.
-
-### 1. Navigate to the API directory
-
-```bash
-cd models_api
-```
-
-### 2. Activate the conda environment
-
-```bash
-conda activate network-traffic-prediction-env
-```
-
-### 3. Install dependencies (if not already installed)
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Start the development server
-
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-The API will be available at `http://localhost:8000`
-
-### API Documentation
-
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-- Health check: `http://localhost:8000/health`
-
----
-
-## Frontend (Next.js Dashboard)
-
-The dashboard provides real-time visualization of network metrics, predictions, and alerts.
-
-### 1. Navigate to the dashboard directory
-
-```bash
-cd network-monitoring-dashboard
-```
-
-### 2. Install dependencies (if not already installed)
-
-```bash
-npm install
-# or
-pnpm install
-```
-
-### 3. Start the development server
-
-```bash
-npm run dev
-# or
-pnpm dev
-```
-
-The dashboard will be available at `http://localhost:3000`
-
----
-
-## Running Both Services
-
-For full functionality, run both services simultaneously:
-
-**Terminal 1 (Backend):**
-```bash
-cd models_api
-conda activate network-traffic-prediction-env
-uvicorn app.main:app --reload --port 8000
-```
-
-**Terminal 2 (Frontend):**
-```bash
-cd network-monitoring-dashboard
-npm run dev
-```
+The GNN inference engine starts automatically when the simulation starts and polls telemetry every 8 seconds. The first GNN prediction appears after 40 seconds (5 windows × 8 seconds).
 
 ---
 
 ## Environment Variables
 
-Create a `.env` file in `network-monitoring-dashboard` if you need to customize the API URL:
+Create `network-monitoring-dashboard/.env.local` to override defaults:
 
-```env 
-# ML models API (FastAPI)
-NEXT_PUBLIC_API_URL=http://localhost:8000
-
-
-Default is `http://localhost:8000` if not specified.
-
-# SDN Simulation backend (Flask + Mininet VM)
-NEXT_PUBLIC_SDN_API_URL=http://<YOUR-VM-IP>:5000
+```env
+# Flask backend URL (default: http://127.0.0.1:5000)
+NEXT_PUBLIC_API_URL=http://192.168.56.101:5000
 ```
 
-For `NEXT_PUBLIC_SDN_API_URL`, replace `<YOUR-VM-IP>` with your Mininet VM's host-only IP.
-Find it inside the VM with:
+The VM's IP address can be found from inside the VM:
+
 ```bash
-ip addr | grep 192.168
+ip addr show | grep "inet " | grep -v "127.0.0.1"
 ```
 
+If accessing the dashboard from a different machine, use the VM's bridged or host-only adapter IP.
+
+---
+
+## Generating a GNN Training Dataset
+
+With the simulation running:
+
+```bash
+# Start dataset generation (all 12 scenarios, ~30 minutes)
+curl -X POST http://127.0.0.1:5000/api/lab/run-gnn-capture \
+  -H "Content-Type: application/json" \
+  -d '{"window_seconds": 5, "prediction_horizons": [15, 30, 60]}'
+
+# Check progress
+curl http://127.0.0.1:5000/api/lab/gnn-capture/status
+
+# List completed datasets
+curl http://127.0.0.1:5000/api/lab/gnn-datasets
+```
+
+Datasets are saved to `mininetDashboard/captures/gnn_datasets/`. See [DATA_GENERATION.md](DATA_GENERATION.md) for details.
 
 ---
 
 ## Troubleshooting
 
-### Backend Issues
+### Backend
 
-| Issue | Solution |
-|-------|----------|
-| `ModuleNotFoundError` | Ensure conda environment is activated and run `pip install -r requirements.txt` |
-| Port 8000 in use | Use a different port: `uvicorn app.main:app --reload --port 8001` |
-| Model loading errors | Verify `.pkl` files exist in `models_api/models/` directory |
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `Can't find module` error on start | pip packages not found under sudo | Use `sudo -E env PYTHONPATH=...` as shown above |
+| Topology returns `"Mininet is still starting"` | Normal during boot | Wait 10–30 s and retry |
+| Port 5000 already in use | Previous instance still running | `sudo pkill -f sdn_dashboard.py` then `sudo mn -c` |
+| `mn -c` needed before restart | Mininet leftover state | `sudo mn -c` cleans all OVS/namespace state |
+| GNN model not found | Missing `.pt` file | Check `mininetDashboard/backend/models/` for `gnn_model_complete.pt` |
 
-### Frontend Issues
+### Dashboard
 
-| Issue | Solution |
-|-------|----------|
-| API connection errors | Ensure backend is running on port 8000 |
-| `npm install` fails | Delete `node_modules` and lock files, then reinstall |
-| Port 3000 in use | Next.js will automatically use next available port |
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| All pages show 0 / loading forever | Backend unreachable | Verify `curl http://127.0.0.1:5000/api/metrics/current` returns JSON |
+| Native binary error on `npm install` | Linux optional dependency bug | Follow the binary copy steps in First-Time Setup above |
+| Port 3000 in use | Another Next.js instance | Next.js will automatically use the next available port |
+| `Hydration` error in console | Clock SSR mismatch | Already fixed in codebase; clear browser cache |
 
-### Phase-1 specific issues
+### Simulation
 
-| Issue | Solution |
-|-------|----------|
-| `Can't resolve 'tailwindcss' in .../Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection` | Run `npm run dev` only from `network-monitoring-dashboard` (not repository root). Then run `npm install` there. |
-| Dashboard pages stuck on `Loading...` | Check backend API directly: `curl -s http://127.0.0.1:5000/api/lab/status`. If it times out, restart backend using the command in Phase-1 section. |
-| Start realtime but Lab stays idle | Mininet may still be booting. Wait for `curl -s http://127.0.0.1:5000/api/topology` to return full topology JSON, then retry `/api/pipeline/start`. |
-
----
-
-## Project Structure
-
-```
-.
-├── models_api/              # FastAPI backend
-│   ├── app/
-│   │   ├── api/            # API routes
-│   │   ├── schemas/        # Pydantic models
-│   │   └── main.py         # Application entry point
-│   ├── models/             # ML model files (.pkl)
-│   └── requirements.txt
-│
-└── network-monitoring-dashboard/  # Next.js frontend
-    ├── app/                # Next.js app routes
-    ├── components/         # React components
-    ├── lib/                # API client and utilities
-    └── package.json
-```
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Dashboard pages stuck after start | Mininet still booting | Check topology API readiness before starting simulation |
+| No anomalies shown in normal mode | Expected | IDS and GNN suppress false positives from iperf3 flows |
+| Traffic shows 200–500 Mbps | Expected | TCP saturation + both-endpoint counting; see [SIMULATION.md](SIMULATION.md#traffic-scale) |
+| GNN shows no prediction for 40 s | Normal warm-up | Engine needs 5 windows (40 s) to start predicting |

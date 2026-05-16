@@ -180,17 +180,17 @@ export default function Alerts() {
                       {alert.title}
                     </h3>
                   </div>
-                  <p className="mb-3 text-gray-600">
+                  <p className="mb-3 text-muted-foreground">
                     {alert.description}
                   </p>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {alert.time}
                   </div>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-gray-600 hover:bg-gray-100"
+                  className="text-muted-foreground hover:bg-muted"
                 >
                   <ChevronRight className="h-5 w-5" />
                 </Button>

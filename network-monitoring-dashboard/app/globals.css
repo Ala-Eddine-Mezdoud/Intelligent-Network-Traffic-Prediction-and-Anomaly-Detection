@@ -96,12 +96,45 @@
   --color-health-red-border: var(--health-red-border);
 }
 
+.dark {
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --primary: #f1f5f9;
+  --primary-foreground: #0f172a;
+  --secondary: #334155;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #334155;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #334155;
+  --ring: #475569;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #f1f5f9;
+  --sidebar-primary-foreground: #0f172a;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #334155;
+  --sidebar-ring: #475569;
+  --health-green-bg: rgba(34, 197, 94, 0.15);
+  --health-orange-bg: rgba(249, 115, 22, 0.15);
+  --health-red-bg: rgba(239, 68, 68, 0.15);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
@@ -137,7 +170,7 @@
   .metric-shimmer {
     position: relative;
     overflow: hidden;
-    background: #f3f4f6;
+    background: var(--muted);
   }
 
   .metric-shimmer::after {
@@ -147,11 +180,20 @@
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.65) 50%,
+      rgba(255, 255, 255, 0.12) 50%,
       transparent 100%
     );
     transform: translateX(-100%);
     animation: metricShimmer 1.6s ease-in-out infinite;
+  }
+
+  .dark .metric-shimmer::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 100%
+    );
   }
 
   @keyframes metricShimmer {

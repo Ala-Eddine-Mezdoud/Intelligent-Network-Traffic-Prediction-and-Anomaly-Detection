@@ -20,9 +20,9 @@ export function AnimatedCard({
   return (
     <motion.div
       className={cn(
-        "rounded-2xl border border-gray-200 bg-white shadow-sm",
+        "rounded-2xl border border-border bg-card shadow-sm",
         "transition-[box-shadow,border-color] duration-500 ease-out",
-        liftOnHover && "hover:border-gray-200 hover:shadow-md",
+        liftOnHover && "hover:border-border hover:shadow-md",
         className,
       )}
       initial={{ opacity: 0, y: 10 }}

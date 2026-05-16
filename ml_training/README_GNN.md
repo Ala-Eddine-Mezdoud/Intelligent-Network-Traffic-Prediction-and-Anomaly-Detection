@@ -7,13 +7,13 @@ This directory contains the training pipeline for Graph Neural Networks that pre
 ### 1. Install Dependencies
 
 ```bash
-cd /Users/alaeddine/dev/Intelligent-Network-Traffic-Prediction-and-Anomaly-Detection/ml_training
+cd ml_training
 
 # Install PyTorch and PyTorch Geometric
 pip install torch torchvision torchaudio
 pip install torch-geometric torch-scatter torch-sparse
 
-# Or install all requirements
+# Or install all at once
 pip install -r requirements.txt
 ```
 

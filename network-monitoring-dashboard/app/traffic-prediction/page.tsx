@@ -94,10 +94,10 @@ export default function TrafficPrediction() {
         <DashboardLayout>
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <div className="font-semibold text-gray-900">
+              <div className="font-semibold text-foreground">
                 Prediction API unavailable
               </div>
-              <div className="mt-2 text-sm text-gray-500">{error}</div>
+              <div className="mt-2 text-sm text-muted-foreground">{error}</div>
             </div>
           </div>
         </DashboardLayout>
@@ -107,7 +107,7 @@ export default function TrafficPrediction() {
     return (
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="h-8 w-56 rounded-xl metric-shimmer bg-gray-100" />
+          <div className="h-8 w-56 rounded-xl metric-shimmer bg-muted" />
           <ChartSkeleton height={450} />
           <MetricCardSkeletonGrid count={3} className="mb-4" />
         </div>
@@ -198,26 +198,26 @@ export default function TrafficPrediction() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:gap-4 md:grid-cols-2">
               <div>
-                <h3 className="mb-2 font-semibold text-gray-900">Model Type</h3>
-                <p className="text-gray-600">{modelInfo.model_type}</p>
+                <h3 className="mb-2 font-semibold text-foreground">Model Type</h3>
+                <p className="text-muted-foreground">{modelInfo.model_type}</p>
               </div>
               <div>
-                <h3 className="mb-2 font-semibold text-gray-900">
+                <h3 className="mb-2 font-semibold text-foreground">
                   Training Data
                 </h3>
-                <p className="text-gray-600">{modelInfo.training_data}</p>
+                <p className="text-muted-foreground">{modelInfo.training_data}</p>
               </div>
               <div>
-                <h3 className="mb-2 font-semibold text-gray-900">
+                <h3 className="mb-2 font-semibold text-foreground">
                   Last Updated
                 </h3>
-                <p className="text-gray-600">{modelInfo.last_updated}</p>
+                <p className="text-muted-foreground">{modelInfo.last_updated}</p>
               </div>
               <div>
-                <h3 className="mb-2 font-semibold text-gray-900">
+                <h3 className="mb-2 font-semibold text-foreground">
                   Prediction Horizon
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-muted-foreground">
                   {modelInfo.prediction_horizon}
                 </p>
               </div>

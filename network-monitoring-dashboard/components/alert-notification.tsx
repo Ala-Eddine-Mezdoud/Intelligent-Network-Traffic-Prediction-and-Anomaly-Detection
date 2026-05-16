@@ -58,12 +58,12 @@ function AlertToastDescription({ alert }: { alert: Alert }) {
         >
           {alert.severity}
         </span>
-        <span className="ml-auto text-[11px] text-gray-500">
+        <span className="ml-auto text-[11px] text-muted-foreground">
           {formatAlertTime(alert.time)}
         </span>
       </div>
-      <p className="m-0 leading-6 text-gray-600">{alert.description}</p>
-      <div className="flex items-center gap-2 border-t border-gray-200 pt-2 text-[11px] text-gray-500">
+      <p className="m-0 leading-6 text-muted-foreground">{alert.description}</p>
+      <div className="flex items-center gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
         <span
           className="h-1.5 w-1.5 rounded-full"
           style={{ backgroundColor: SEVERITY_DOT[key] }}
@@ -81,8 +81,13 @@ export function showAlertToast(toast: ToastTrigger, alert: Alert) {
   toast({
     title: alert.title,
     description: <AlertToastDescription alert={alert} />,
-    variant: isCritical ? "destructive" : "default",
+    variant: "default",
     duration: 10000,
+    className: isCritical
+      ? "border-red-500/50 bg-red-50 dark:bg-red-950/50 dark:border-red-500/40 text-red-900 dark:text-red-100"
+      : key === "medium"
+      ? "border-orange-500/50 bg-orange-50 dark:bg-orange-950/50 dark:border-orange-500/40"
+      : undefined,
   });
 }
 

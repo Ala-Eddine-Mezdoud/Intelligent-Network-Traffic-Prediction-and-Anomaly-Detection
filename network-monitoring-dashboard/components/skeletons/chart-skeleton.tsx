@@ -22,7 +22,7 @@ export function ChartSkeleton({
       initial="hidden"
       animate="visible"
       className={cn(
-        "flex flex-col rounded-3xl border border-gray-200 bg-white p-5 shadow-sm md:p-6",
+        "flex flex-col rounded-3xl border border-border bg-card p-5 shadow-sm md:p-6",
         className,
       )}
     >

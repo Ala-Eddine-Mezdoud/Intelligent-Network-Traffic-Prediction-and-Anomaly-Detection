@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "postinstall": "node -e \"const fs=require('fs');const src='node_modules/@tailwindcss/oxide-linux-x64-gnu/tailwindcss-oxide.linux-x64-gnu.node';const dst='node_modules/@tailwindcss/oxide/tailwindcss-oxide.linux-x64-gnu.node';if(fs.existsSync(src)&&!fs.existsSync(dst))fs.copyFileSync(src,dst);\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@next/swc-linux-x64-gnu": "^16.2.6",
     "@radix-ui/react-accordion": "1.2.12",
     "@radix-ui/react-alert-dialog": "1.1.15",
     "@radix-ui/react-aspect-ratio": "1.1.8",
@@ -48,6 +50,7 @@
     "embla-carousel-react": "8.6.0",
     "framer-motion": "^12.38.0",
     "input-otp": "1.4.2",
+    "lightningcss-linux-x64-gnu": "^1.32.0",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",

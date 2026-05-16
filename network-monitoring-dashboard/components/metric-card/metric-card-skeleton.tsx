@@ -7,7 +7,7 @@ import { fadeUp } from "./constants";
 function Shimmer({ className }: { className?: string }) {
   return (
     <motion.div
-      className={cn("metric-shimmer rounded-lg bg-gray-100", className)}
+      className={cn("metric-shimmer rounded-lg bg-muted", className)}
       initial={{ opacity: 0.5 }}
       animate={{ opacity: [0.5, 0.85, 0.5] }}
       transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
@@ -27,7 +27,7 @@ export function MetricCardSkeleton({
   return (
     <motion.div
       className={cn(
-        "flex h-full min-h-[168px] flex-col rounded-3xl border border-gray-200 bg-white p-6 shadow-sm",
+        "flex h-full min-h-[168px] flex-col rounded-3xl border border-border bg-card p-6 shadow-sm",
         className,
       )}
       initial={{ opacity: 0, y: 8 }}

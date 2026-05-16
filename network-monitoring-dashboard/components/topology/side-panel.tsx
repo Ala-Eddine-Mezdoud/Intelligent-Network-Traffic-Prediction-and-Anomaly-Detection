@@ -29,15 +29,15 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
           transition={springSoft}
-          className="absolute bottom-4 right-4 top-4 z-50 flex w-80 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
+          className="absolute bottom-4 right-4 top-4 z-50 flex w-80 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-lg"
         >
-          <div className="relative border-b border-gray-200 p-5">
+          <div className="relative border-b border-border p-5">
             <motion.button
               type="button"
               onClick={onClose}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="absolute right-4 top-4 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              className="absolute right-4 top-4 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </motion.button>
@@ -46,7 +46,7 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="rounded-xl border border-gray-200 bg-gray-50 p-3"
+                className="rounded-xl border border-border bg-muted p-3"
                 style={{ color: healthColor }}
               >
                 <Shield className="h-6 w-6" />
@@ -56,8 +56,8 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.05 }}
               >
-                <h3 className="text-lg font-semibold text-gray-900">{node.id}</h3>
-                <p className="font-mono text-xs text-gray-500">
+                <h3 className="text-lg font-semibold text-foreground">{node.id}</h3>
+                <p className="font-mono text-xs text-muted-foreground">
                   {node.ip || "No IP assigned"}
                 </p>
               </motion.div>
@@ -69,7 +69,7 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.08 }}
             >
-              <Badge variant="outline" className="border-gray-200 text-gray-600">
+              <Badge variant="outline" className="border-border text-muted-foreground">
                 {node.type}
               </Badge>
               <Badge
@@ -88,11 +88,11 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
             </div>
 
             <section className="space-y-2">
-              <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+              <h4 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Network zone
               </h4>
-              <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <span className="text-sm capitalize text-gray-700">
+              <div className="flex items-center justify-between rounded-xl border border-border bg-muted p-4">
+                <span className="text-sm capitalize text-foreground">
                   {node.zone.replace(/-/g, " ")}
                 </span>
                 <span
@@ -103,7 +103,7 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
             </section>
 
             <section className="space-y-3">
-              <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+              <h4 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Recent events
               </h4>
               <EventItem time="14:22" msg="Connection established" type="neutral" />
@@ -111,7 +111,7 @@ export function SidePanel({ node, onClose }: SidePanelProps) {
             </section>
           </div>
 
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-border p-4">
             <Button className={cn("w-full", primaryButton)}>Node analysis</Button>
           </div>
         </motion.aside>
@@ -133,15 +133,15 @@ function MetricSmall({
     <motion.div
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="rounded-xl border border-gray-200 bg-gray-50 p-3"
+      className="rounded-xl border border-border bg-muted p-3"
     >
       <motion.div className="mb-1 flex items-center gap-2">
-        <Icon className="h-3 w-3 text-gray-400" />
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-500">
+        <Icon className="h-3 w-3 text-muted-foreground" />
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
       </motion.div>
-      <p className="text-sm font-semibold text-gray-900">{value}</p>
+      <p className="text-sm font-semibold text-foreground">{value}</p>
     </motion.div>
   );
 }
@@ -161,11 +161,11 @@ function EventItem({
       animate={{ opacity: 1, x: 0 }}
       className="flex items-center gap-3 text-[11px]"
     >
-      <span className="font-mono text-gray-400">{time}</span>
+      <span className="font-mono text-muted-foreground">{time}</span>
       <span
-        className={`h-1.5 w-1.5 rounded-full ${type === "warning" ? "bg-orange-500" : "bg-gray-300"}`}
+        className={`h-1.5 w-1.5 rounded-full ${type === "warning" ? "bg-orange-500" : "bg-muted-foreground/30"}`}
       />
-      <span className="text-gray-600">{msg}</span>
+      <span className="text-muted-foreground">{msg}</span>
     </motion.div>
   );
 }

@@ -12,7 +12,7 @@ export function TopologySkeleton({ className }: { className?: string }) {
       initial="hidden"
       animate="visible"
       className={cn(
-        "relative h-full min-h-[480px] w-full overflow-hidden rounded-3xl border border-gray-200 bg-gray-50",
+        "relative h-full min-h-[480px] w-full overflow-hidden rounded-3xl border border-border bg-muted",
         className,
       )}
     >
@@ -41,7 +41,7 @@ export function TopologySkeleton({ className }: { className?: string }) {
           <ShimmerBlock className="absolute right-0 top-1/3 h-8 w-8 rounded-full" />
         </div>
       </div>
-      <div className="absolute bottom-4 left-4 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="absolute bottom-4 left-4 rounded-xl border border-border bg-card p-3 shadow-sm">
         <div className="flex gap-4">
           <ShimmerBlock className="h-3 w-16" />
           <ShimmerBlock className="h-3 w-16" />

@@ -26,7 +26,7 @@ const tierStyles = {
   critical: "text-red-500 bg-red-500/10 border-red-500/30",
   warning: "text-orange-500 bg-orange-500/10 border-orange-500/30",
   healthy: "text-green-500 bg-green-500/10 border-green-500/30",
-  neutral: "text-gray-600 bg-gray-50 border-gray-200",
+  neutral: "text-muted-foreground bg-muted border-border",
 };
 
 export function getStateColorClass(state: string): string {
@@ -76,13 +76,13 @@ export const SEVERITY_STYLES: Record<
     border: "border-green-500/30",
   },
   info: {
-    bg: "bg-gray-100",
-    text: "text-gray-600",
-    border: "border-gray-200",
+    bg: "bg-muted",
+    text: "text-muted-foreground",
+    border: "border-border",
   },
   default: {
-    bg: "bg-gray-50",
-    text: "text-gray-600",
-    border: "border-gray-200",
+    bg: "bg-muted",
+    text: "text-muted-foreground",
+    border: "border-border",
   },
 };

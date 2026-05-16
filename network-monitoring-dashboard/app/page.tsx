@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useTheme } from "next-themes";
 import {
   Activity,
   AlertTriangle,
@@ -51,6 +52,7 @@ import { DASHBOARD_COLORS, STATE_COLORS } from "@/lib/dashboard-theme";
 import { TrafficPredictionChart } from "@/components/traffic-prediction-chart";
 import {
   chartTooltipStyle,
+  chartTooltipStyleDark,
   idleDot,
   mutedBadge,
   pageSection,
@@ -143,6 +145,8 @@ interface SimStatus {
 }
 
 export default function Dashboard() {
+  const { theme } = useTheme();
+  const tooltipStyle = theme === "dark" ? chartTooltipStyleDark : chartTooltipStyle;
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [predictionData, setPredictionData] = useState<any[]>([]);
   const [protocolData, setProtocolData] = useState<any[]>([]);
@@ -314,16 +318,16 @@ export default function Dashboard() {
               <div className={mutedBadge}>
                 <Clock className="h-3 w-3" />
                 Next: <span className="font-semibold ml-1">{nextAttack}</span>
-                <span className="ml-1 text-gray-400">in {nextAttackIn}s</span>
+                <span className="ml-1 text-muted-foreground">in {nextAttackIn}s</span>
               </div>
             )}
 
             {/* Last attack */}
             {lastAttack && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <ChevronRight className="h-3 w-3" />
                 Last attack:{" "}
-                <span className="font-medium text-gray-700 ml-1">
+                <span className="font-medium text-foreground ml-1">
                   {lastAttack.name}
                 </span>
               </div>
@@ -338,7 +342,7 @@ export default function Dashboard() {
                 disabled={isPipelineStopping}
                 variant="outline"
                 size="sm"
-                className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                className="border-border text-foreground hover:bg-muted"
               >
                 {isPipelineStopping ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -368,13 +372,13 @@ export default function Dashboard() {
         {/* Active operational anomalies row */}
         {activeOpAnomalies.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-2">
-            <span className="text-xs text-gray-500 self-center">
+            <span className="text-xs text-muted-foreground self-center">
               Active anomalies:
             </span>
             {activeOpAnomalies.map((a, i) => (
               <span
                 key={i}
-                className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600"
+                className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
               >
                 {a.node} · {a.profile} · {a.duration_seconds}s
               </span>
@@ -406,7 +410,7 @@ export default function Dashboard() {
               {anomalyNodes.slice(0, 6).map((n) => (
                 <span
                   key={n.node}
-                  className="rounded border border-current/20 bg-gray-100 px-2 py-0.5 font-mono text-xs"
+                  className="rounded border border-current/20 bg-muted px-2 py-0.5 font-mono text-xs"
                 >
                   {n.node}
                 </span>
@@ -421,10 +425,10 @@ export default function Dashboard() {
         <div className={cn(pageSection, "mb-4")}>
           <div className="flex items-center gap-2 mb-3">
             <Siren className="h-4 w-4 text-orange-500" />
-            <h3 className="text-sm font-semibold text-gray-900">
+            <h3 className="text-sm font-semibold text-foreground">
               GNN Anomaly History
             </h3>
-            <span className="ml-auto text-xs text-gray-500">
+            <span className="ml-auto text-xs text-muted-foreground">
               {anomalyHistory.length} events this session
             </span>
           </div>
@@ -437,22 +441,22 @@ export default function Dashboard() {
               return (
                 <div
                   key={i}
-                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"
+                  className="flex items-center gap-3 rounded-lg border border-border bg-muted px-3 py-2 text-xs"
                 >
-                  <span className="text-gray-500 font-mono shrink-0 w-16">
+                  <span className="text-muted-foreground font-mono shrink-0 w-16">
                     {event.timestamp?.split(" ")[1] ?? "—"}
                   </span>
                   <span className={`font-semibold shrink-0 ${textColor}`}>
                     {event.state.replace(/_/g, " ")}
                   </span>
-                  <span className="text-gray-500 shrink-0">
+                  <span className="text-muted-foreground shrink-0">
                     {(event.confidence * 100).toFixed(0)}%
                   </span>
-                  <span className="text-gray-600 truncate flex-1">
+                  <span className="text-muted-foreground truncate flex-1">
                     {event.anomaly_nodes?.map((n: any) => n.node).join(", ") ||
                       "—"}
                   </span>
-                  <span className="text-gray-500 font-mono shrink-0">
+                  <span className="text-muted-foreground font-mono shrink-0">
                     {event.total_traffic_mbps} Mbps
                   </span>
                 </div>
@@ -597,7 +601,7 @@ export default function Dashboard() {
                     />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={chartTooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -631,7 +635,7 @@ export default function Dashboard() {
             />
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Threat Level</span>
+                <span className="text-sm text-muted-foreground">Threat Level</span>
                 <span
                   className={`text-sm font-semibold ${systemStatus.threat_level === "Low" ? "text-green-500" : systemStatus.threat_level === "Medium" ? "text-orange-500" : "text-red-500"}`}
                 >
@@ -653,7 +657,7 @@ export default function Dashboard() {
               </div>
             </div>
             {gnnRunning && gnnPreds && (
-              <div className="pt-2 border-t border-border/50 text-xs text-gray-500 space-y-1">
+              <div className="pt-2 border-t border-border/50 text-xs text-muted-foreground space-y-1">
                 <div className="flex justify-between">
                   <span>GNN window state</span>
                   <span
@@ -664,13 +668,13 @@ export default function Dashboard() {
                 </div>
                 <div className="flex justify-between">
                   <span>Anomaly nodes</span>
-                  <span className="text-gray-600">
+                  <span className="text-muted-foreground">
                     {gnnPreds.anomaly_count} / {gnnPreds.total_nodes}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Last inference</span>
-                  <span className="font-mono text-gray-600">
+                  <span className="font-mono text-muted-foreground">
                     {gnnPreds.timestamp?.split(" ")[1] ?? "–"}
                   </span>
                 </div>
@@ -697,7 +701,7 @@ function StatusBar({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-600">{label}</span>
+        <span className="text-sm text-muted-foreground">{label}</span>
         <span className={`text-sm font-semibold ${textColor}`}>{value}%</span>
       </div>
       <div className="h-2 rounded-full bg-muted">

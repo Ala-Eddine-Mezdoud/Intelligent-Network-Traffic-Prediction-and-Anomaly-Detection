@@ -35,7 +35,7 @@ export function MetricSparkline({ data, health }: MetricSparklineProps) {
 
   return (
     <motion.div
-      className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3.5"
+      className="rounded-2xl border border-border bg-muted/80 p-3.5"
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "spring", stiffness: 350, damping: 30 }}
@@ -54,7 +54,7 @@ export function MetricSparkline({ data, health }: MetricSparklineProps) {
         />
       </svg>
       <motion.div
-        className="mt-2.5 flex items-center justify-between text-[11px] text-gray-500"
+        className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
@@ -64,7 +64,7 @@ export function MetricSparkline({ data, health }: MetricSparklineProps) {
           key={last}
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="font-medium tabular-nums text-gray-700"
+          className="font-medium tabular-nums text-foreground"
         >
           {last}
         </motion.span>

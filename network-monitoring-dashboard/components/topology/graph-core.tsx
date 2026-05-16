@@ -168,14 +168,14 @@ export function TopologyGraph() {
         variants={fadeIn}
         initial="hidden"
         animate="visible"
-        className="flex h-full min-h-[480px] flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50"
+        className="flex h-full min-h-[480px] flex-col items-center justify-center rounded-2xl border border-border bg-muted"
       >
-        <p className="text-sm font-medium text-gray-700">Unable to load topology</p>
-        <p className="mt-1 text-xs text-gray-500">{error}</p>
+        <p className="text-sm font-medium text-foreground">Unable to load topology</p>
+        <p className="mt-1 text-xs text-muted-foreground">{error}</p>
         <button
           type="button"
           onClick={fetchData}
-          className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+          className="mt-4 rounded-xl border border-border bg-card px-4 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
         >
           Retry
         </button>
@@ -189,7 +189,7 @@ export function TopologyGraph() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="relative h-full w-full min-h-[480px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+      className="relative h-full w-full min-h-[480px] overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
     >
       <motion.div
         className="pointer-events-none absolute inset-0 opacity-[0.35]"
@@ -282,7 +282,7 @@ export function TopologyGraph() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="absolute bottom-4 left-4 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur-sm"
+        className="absolute bottom-4 left-4 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur-sm"
       >
         <div className="flex flex-wrap items-center gap-4">
           <LegendItem color={GRAPH_COLORS.healthy} label="Healthy" />
@@ -308,7 +308,7 @@ function LegendItem({ color, label }: { color: string; label: string }) {
         animate={{ scale: [1, 1.15, 1] }}
         transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
       />
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
     </motion.div>

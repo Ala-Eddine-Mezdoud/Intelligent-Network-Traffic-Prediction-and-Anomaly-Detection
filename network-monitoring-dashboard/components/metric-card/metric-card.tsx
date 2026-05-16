@@ -46,7 +46,7 @@ export interface MetricCardProps {
 
 function StatusDot({ health }: { health: MetricHealth }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full",
@@ -82,8 +82,8 @@ function MetricIcon({
   return (
     <motion.div
       className={cn(
-        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-gray-100 bg-gray-50",
-        "transition-colors duration-300 group-hover:border-gray-200 group-hover:bg-white",
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted",
+        "transition-colors duration-300 group-hover:border-border group-hover:bg-card",
       )}
       whileHover={{ scale: 1.06, rotate: 2 }}
       transition={cardSpring}
@@ -120,9 +120,9 @@ function MetricCardInner({
   const body = (
     <motion.article
       className={cn(
-        "group relative flex h-full min-h-[168px] flex-col overflow-hidden rounded-3xl border border-gray-200/80 bg-white p-6 shadow-sm",
+        "group relative flex h-full min-h-[168px] flex-col overflow-hidden rounded-3xl border border-border/80 bg-card p-6 shadow-sm",
         "transition-[box-shadow,border-color] duration-500 ease-out",
-        "hover:border-gray-200 hover:shadow-lg",
+        "hover:border-border hover:shadow-lg",
         accent.border,
         "border-l-[3px]",
         className,
@@ -147,11 +147,11 @@ function MetricCardInner({
 
       <header className="relative flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {title}
           </p>
           {description && (
-            <p className="max-w-[15rem] text-xs leading-relaxed text-gray-500">
+            <p className="max-w-[15rem] text-xs leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}
@@ -178,7 +178,7 @@ function MetricCardInner({
               />
             </span>
             {unit && (
-              <span className="pb-0.5 text-sm font-medium text-gray-400">
+              <span className="pb-0.5 text-sm font-medium text-muted-foreground">
                 {unit}
               </span>
             )}
@@ -205,7 +205,7 @@ function MetricCardInner({
           <Button
             asChild
             variant="outline"
-            className="mt-2 w-full border-gray-200 bg-white/80 text-gray-900 shadow-none transition-all hover:border-gray-300 hover:bg-gray-50 hover:shadow-sm"
+            className="mt-2 w-full border-border bg-card/80 text-foreground shadow-none transition-all hover:border-border hover:bg-muted hover:shadow-sm"
           >
             <Link href={detailHref} className="gap-2">
               View details

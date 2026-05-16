@@ -211,12 +211,6 @@ class GNNInferenceEngine:
         # accumulates over the entire session.
         self._anomaly_history: deque = deque(maxlen=100)
 
-        # Stable forecast cache — recomputed at most once every 60 s so the
-        # chart doesn't jump on every 8-second inference cycle.
-        self._forecast_base: float = 0.0
-        self._forecast_multiplier: float = 1.0
-        self._forecast_computed_at: float = 0.0
-
         # Active manual injection registered by inject_anomaly() in lab.py.
         # Used to override model predictions with ground-truth labels while
         # the injection is active (model lag / training distribution mismatch).
@@ -677,45 +671,68 @@ class GNNInferenceEngine:
             # don't gate on the raw model output and miss real injected anomalies.
             effective_conf = 0.85 if override_label else float(window_conf)
 
-            # ── Stable forecast ────────────────────────────────────────────
-            # Recompute base/multiplier at most once per 60 s so the forecast
-            # curve doesn't jump on every 8-second inference cycle.
-            now_ts = time.time()
-            if now_ts - self._forecast_computed_at >= 60.0 or self._forecast_base == 0.0:
-                recent_hist = [
-                    h["historical"] for h in list(self._traffic_history)[-5:]
-                    if h.get("historical") is not None
-                ]
-                self._forecast_base = (
-                    sum(recent_hist) / len(recent_hist) if recent_hist else total_traffic_mbps
-                )
-                if window_label == "DDOS":
-                    self._forecast_multiplier = 1.15
-                elif window_label == "CONGESTION":
-                    self._forecast_multiplier = 0.85
-                elif window_label == "INFRA_FAILURE":
-                    self._forecast_multiplier = 0.60
-                else:
-                    self._forecast_multiplier = 1.0
-                self._forecast_computed_at = now_ts
-
+            # ── Live EWMA + slope forecast ─────────────────────────────────
+            # Recomputed every inference cycle so the predicted line reacts
+            # to the current traffic trend immediately, not every 60 seconds.
+            hist_vals = [
+                h["historical"] for h in list(self._traffic_history)
+                if h.get("historical") is not None
+            ]
             future_points = []
-            for idx in range(1, 13):
-                wave = np.sin(idx * 0.5) * 0.04
-                val = max(
-                    0.0,
-                    self._forecast_base
-                    * (self._forecast_multiplier ** (idx / 4.0))
-                    * (1.0 + wave),
-                )
-                future_time = (datetime.now() + timedelta(seconds=idx * 30)).strftime("%H:%M:%S")
-                future_points.append({
-                    "time": future_time,
-                    "historical": None,
-                    "predicted": round(val, 3),
-                    "upper": round(val * 1.2, 3),
-                    "lower": round(val * 0.8, 3),
-                })
+            if len(hist_vals) >= 3:
+                # EWMA forward in time (oldest → newest) over last 8 samples
+                alpha = 0.35
+                window = hist_vals[max(0, len(hist_vals) - 8):]
+                ewma = window[0]
+                for v in window[1:]:
+                    ewma = alpha * v + (1.0 - alpha) * ewma
+
+                # Short-term slope from last 5 samples
+                n_s = min(len(hist_vals), 5)
+                slope = (hist_vals[-1] - hist_vals[-n_s]) / max(n_s - 1, 1)
+
+                # Anomaly-aware slope bias
+                if window_label == "DDOS":
+                    slope = abs(slope) + ewma * 0.025
+                elif window_label in ("CONGESTION", "INFRA_FAILURE"):
+                    slope = -(abs(slope) + ewma * 0.01)
+
+                # Historical std-dev → realistic confidence band width
+                recent = hist_vals[-min(len(hist_vals), 12):]
+                mean_r = sum(recent) / len(recent)
+                variance = sum((v - mean_r) ** 2 for v in recent) / max(len(recent) - 1, 1)
+                std_dev = max(variance ** 0.5, ewma * 0.05)  # at least 5% of mean
+
+                base = hist_vals[-1]  # start from actual last measured value
+                for idx in range(1, 13):
+                    damping = 0.92 ** idx          # gentler decay (~half-life 8 steps)
+                    val = max(0.0, base + slope * idx * damping)
+                    band = std_dev * (1.0 + idx * 0.08)   # widen 8% per step
+                    future_time = (
+                        datetime.now() + timedelta(seconds=idx * 30)
+                    ).strftime("%H:%M:%S")
+                    future_points.append({
+                        "time": future_time,
+                        "historical": None,
+                        "predicted": round(val, 3),
+                        "upper": round(val + band, 3),
+                        "lower": round(max(0.0, val - band), 3),
+                    })
+            else:
+                # Not enough history yet — flat projection at current traffic
+                for idx in range(1, 13):
+                    val = total_traffic_mbps
+                    sigma = 0.08 + (idx - 1) * 0.015
+                    future_time = (
+                        datetime.now() + timedelta(seconds=idx * 30)
+                    ).strftime("%H:%M:%S")
+                    future_points.append({
+                        "time": future_time,
+                        "historical": None,
+                        "predicted": round(val, 3),
+                        "upper": round(val * (1.0 + sigma), 3),
+                        "lower": round(max(0.0, val * (1.0 - sigma)), 3),
+                    })
 
             # Store historical point with second-level timestamps
             hist_time = datetime.now().strftime("%H:%M:%S")

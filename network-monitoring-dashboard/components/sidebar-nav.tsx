@@ -135,25 +135,25 @@ export function SidebarNav({
     <>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 hidden h-screen flex-col overflow-hidden border-r border-gray-200 bg-white text-gray-900 transition-all duration-300 ease-out md:flex",
+          "fixed left-0 top-0 z-40 hidden h-screen flex-col overflow-hidden border-r border-border bg-card text-card-foreground transition-all duration-300 ease-out md:flex",
           open ? "translate-x-0" : "-translate-x-full",
           compact ? "w-20" : "w-72",
         )}
       >
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-5">
+        <div className="flex items-center justify-between border-b border-border px-4 py-5">
           <div className="flex items-center gap-3">
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 text-gray-900"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted text-foreground"
               aria-hidden
             >
               <Network className="h-5 w-5 stroke-[1.75]" />
             </div>
             {!compact && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900">
+                <p className="truncate text-sm font-semibold text-foreground">
                   NetGuard
                 </p>
-                <p className="text-[11px] text-gray-500">Network operations</p>
+                <p className="text-[11px] text-muted-foreground">Network operations</p>
               </div>
             )}
           </div>
@@ -187,7 +187,7 @@ export function SidebarNav({
                   aria-expanded={sectionExpanded}
                 >
                   <SectionIcon
-                    className="h-4 w-4 shrink-0 stroke-[1.75] text-gray-400 transition-colors duration-200 group-hover:text-gray-600"
+                    className="h-4 w-4 shrink-0 stroke-[1.75] text-muted-foreground transition-colors duration-200 group-hover:text-muted-foreground"
                     aria-hidden
                   />
                   {!compact && (
@@ -198,7 +198,7 @@ export function SidebarNav({
                   {!compact && (
                     <ChevronRight
                       className={cn(
-                        "ml-auto h-4 w-4 text-gray-400 transition-transform duration-300",
+                        "ml-auto h-4 w-4 text-muted-foreground transition-transform duration-300",
                         sectionExpanded && "rotate-90",
                       )}
                       aria-hidden
@@ -247,7 +247,7 @@ export function SidebarNav({
           })}
         </nav>
 
-        <div className="border-t border-gray-200 px-3 py-4">
+        <div className="border-t border-border px-3 py-4">
           <Link
             href="/support"
             title={compact ? "Support" : "Help & documentation"}
@@ -270,7 +270,7 @@ export function SidebarNav({
         <button
           type="button"
           onClick={onToggle}
-          className="fixed left-3 top-4 z-50 hidden h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition-all duration-200 ease-out hover:bg-[#f0f2f5] hover:text-gray-900 active:bg-[#e4e6eb] md:flex"
+          className="fixed left-3 top-4 z-50 hidden h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-all duration-200 ease-out hover:bg-accent hover:text-foreground md:flex"
           aria-label="Open sidebar"
         >
           <PanelLeftOpen className="h-5 w-5" />

@@ -22,7 +22,7 @@ export function TableSkeleton({
       initial="hidden"
       animate="visible"
       className={cn(
-        "rounded-3xl border border-gray-200 bg-white p-5 shadow-sm md:p-6",
+        "rounded-3xl border border-border bg-card p-5 shadow-sm md:p-6",
         className,
       )}
     >
@@ -39,7 +39,7 @@ export function TableSkeleton({
         {Array.from({ length: rows }).map((_, row) => (
           <div
             key={row}
-            className="grid gap-3 border-t border-gray-100 pt-3"
+            className="grid gap-3 border-t border-border pt-3"
             style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
           >
             {Array.from({ length: columns }).map((_, col) => (

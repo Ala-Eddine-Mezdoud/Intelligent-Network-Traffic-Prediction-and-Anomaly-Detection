@@ -117,13 +117,13 @@ const ANOMALY_NODES: Record<AnomalyType, string[]> = {
 const colorMap: Record<string, string> = {
   orange: "border-orange-500/30 text-orange-600 hover:bg-orange-500/10",
   red: "border-red-500/30 text-red-600 hover:bg-red-500/10",
-  gray: "border-gray-200 text-gray-600 hover:bg-gray-50",
+  gray: "border-border text-muted-foreground hover:bg-muted",
 };
 
 const colorActiveMap: Record<string, string> = {
   orange: "bg-orange-500/10 border-orange-500/30 text-orange-600",
   red: "bg-red-500/10 border-red-500/30 text-red-600",
-  gray: "bg-gray-100 border-gray-200 text-gray-900",
+  gray: "bg-muted border-border text-foreground",
 };
 
 export default function SimulationPage() {
@@ -330,17 +330,17 @@ export default function SimulationPage() {
         {/* ── Page Header ──────────────────────────────────────────────── */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Network Simulation Lab
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               Run steady-state or full simulation, then inject anomalies to test
               GNN detection.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted border border-border rounded-full px-3 py-1.5">
             <span
-              className={`w-2 h-2 rounded-full ${anySimRunning ? "bg-green-500 animate-pulse" : "bg-gray-200"}`}
+              className={`w-2 h-2 rounded-full ${anySimRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`}
             />
             {anySimRunning
               ? isNormalRunning
@@ -352,18 +352,18 @@ export default function SimulationPage() {
 
         {/* ── GNN Status Bar ─────────────────────────────────────────── */}
         {gnnActive && (
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-4 flex-wrap shadow-sm">
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <Network className="h-4 w-4 text-gray-900" />
-              <span className="font-semibold text-gray-900">GNN Active</span>
-              <span className="text-gray-400">·</span>
+          <div className="rounded-2xl border border-border bg-muted px-4 py-3 flex items-center gap-4 flex-wrap shadow-sm">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Network className="h-4 w-4 text-foreground" />
+              <span className="font-semibold text-foreground">GNN Active</span>
+              <span className="text-muted-foreground">·</span>
               <span>{predsMade} predictions</span>
             </div>
             {windowState && (
               <div
                 className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
                   windowState === "NORMAL"
-                    ? "border-green-500/30 text-gray-900 bg-green-500/10"
+                    ? "border-green-500/30 text-foreground bg-green-500/10"
                     : windowState === "WARNING"
                       ? "border-orange-500/30 text-orange-600 bg-orange-500/10 animate-pulse"
                       : "border-red-500/30 text-red-600 bg-red-500/10 animate-pulse"
@@ -379,24 +379,24 @@ export default function SimulationPage() {
               </div>
             )}
             {isRealtimeRunning && nextAttack && nextAttackIn != null && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-full px-2.5 py-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-card border border-border rounded-full px-2.5 py-0.5">
                 <Clock className="h-3 w-3" />
                 Next: {nextAttack} in {nextAttackIn}s
               </div>
             )}
             {lastAttack && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 Last attack:{" "}
-                <span className="text-gray-900">{lastAttack.name}</span>
+                <span className="text-foreground">{lastAttack.name}</span>
               </span>
             )}
             {activeOpAnomalies.length > 0 && (
               <div className="flex flex-wrap gap-1.5 items-center">
-                <span className="text-[11px] text-gray-500">Active:</span>
+                <span className="text-[11px] text-muted-foreground">Active:</span>
                 {activeOpAnomalies.map((a: any, i: number) => (
                   <span
                     key={i}
-                    className="text-[11px] bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5 text-gray-600"
+                    className="text-[11px] bg-muted border border-border rounded-full px-2 py-0.5 text-muted-foreground"
                   >
                     {a.node} · {a.profile} ·{" "}
                     {Math.max(0, Math.round(a.expires_at - Date.now() / 1000))}s
@@ -408,29 +408,29 @@ export default function SimulationPage() {
         )}
 
         {/* ── Simulation Mode Selector ──────────────────────────────── */}
-        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+        <div className="bg-card border border-border shadow-sm rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Simulation Mode
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Normal Mode */}
             <div
-              className={`rounded-lg border p-4 space-y-3 transition-colors ${isNormalRunning ? "border-green-500/30 bg-green-500/10" : "border-gray-200 bg-gray-50"}`}
+              className={`rounded-lg border p-4 space-y-3 transition-colors ${isNormalRunning ? "border-green-500/30 bg-green-500/10" : "border-border bg-muted"}`}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${isNormalRunning ? "bg-green-500 animate-pulse" : "bg-gray-200"}`}
+                  className={`w-2 h-2 rounded-full shrink-0 ${isNormalRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`}
                 />
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="text-sm font-semibold text-foreground">
                   Normal Simulation
                 </span>
                 <span
-                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isNormalRunning ? "border-green-500/30 text-gray-900 bg-green-500/10" : "border-gray-200 text-gray-500"}`}
+                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isNormalRunning ? "border-green-500/30 text-foreground bg-green-500/10" : "border-border text-muted-foreground"}`}
                 >
                   {isNormalRunning ? "Running" : "Stopped"}
                 </span>
               </div>
-              <p className="text-[12px] text-gray-500 leading-snug">
+              <p className="text-[12px] text-muted-foreground leading-snug">
                 Steady balanced traffic across all 26 nodes — matching GNN
                 training conditions. No auto-attacks. Use the injection panel
                 below to test anomaly detection.
@@ -440,7 +440,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStopNormal}
                     disabled={simLoading || isRealtimeRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40"
                   >
                     <Square className="w-3 h-3 fill-current" />
                     {simLoading ? "Stopping…" : "Stop"}
@@ -449,7 +449,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStartNormal}
                     disabled={simLoading || anySimRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-gray-900 hover:bg-gray-800 text-white transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-foreground hover:bg-foreground/90 text-background transition-colors disabled:opacity-40"
                   >
                     <Play className="w-3 h-3 fill-current" />
                     {simLoading ? "Starting…" : "Start Normal"}
@@ -460,22 +460,22 @@ export default function SimulationPage() {
 
             {/* Full Mode */}
             <div
-              className={`rounded-lg border p-4 space-y-3 transition-colors ${isRealtimeRunning ? "border-green-500/30 bg-green-500/10" : "border-gray-200 bg-gray-50"}`}
+              className={`rounded-lg border p-4 space-y-3 transition-colors ${isRealtimeRunning ? "border-green-500/30 bg-green-500/10" : "border-border bg-muted"}`}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${isRealtimeRunning ? "bg-green-500 animate-pulse" : "bg-gray-200"}`}
+                  className={`w-2 h-2 rounded-full shrink-0 ${isRealtimeRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`}
                 />
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="text-sm font-semibold text-foreground">
                   Full Simulation
                 </span>
                 <span
-                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isRealtimeRunning ? "border-green-500/30 text-gray-900 bg-green-500/10" : "border-gray-200 text-gray-500"}`}
+                  className={`ml-auto text-[11px] px-2 py-0.5 rounded-full border ${isRealtimeRunning ? "border-green-500/30 text-foreground bg-green-500/10" : "border-border text-muted-foreground"}`}
                 >
                   {isRealtimeRunning ? "Running" : "Stopped"}
                 </span>
               </div>
-              <p className="text-[12px] text-gray-500 leading-snug">
+              <p className="text-[12px] text-muted-foreground leading-snug">
                 Full realtime pipeline with periodic attack injection (DDoS,
                 PortScan, SSH-Patator…), pcap capture, and IDS inference every
                 30 s.
@@ -485,7 +485,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStopRealtime}
                     disabled={simLoading || isNormalRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40"
                   >
                     <Square className="w-3 h-3 fill-current" />
                     {simLoading ? "Stopping…" : "Stop"}
@@ -494,7 +494,7 @@ export default function SimulationPage() {
                   <button
                     onClick={handleStartRealtime}
                     disabled={simLoading || anySimRunning}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-gray-900 hover:bg-gray-800 text-white transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-foreground hover:bg-foreground/90 text-background transition-colors disabled:opacity-40"
                   >
                     <Play className="w-3 h-3 fill-current" />
                     {simLoading ? "Starting…" : "Start Full"}
@@ -506,19 +506,19 @@ export default function SimulationPage() {
         </div>
 
         {/* ── Manual Anomaly Injection ──────────────────────────────── */}
-        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-4">
+        <div className="bg-card border border-border shadow-sm rounded-2xl p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-900">
+              <p className="text-xs font-bold uppercase tracking-widest text-foreground">
                 Manual Anomaly Injection
               </p>
-              <p className="text-[12px] text-gray-500 mt-0.5">
+              <p className="text-[12px] text-muted-foreground mt-0.5">
                 Inject a specific anomaly and observe GNN detection in real
                 time.
               </p>
             </div>
             {!anySimRunning && (
-              <span className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-0.5">
+              <span className="text-[11px] text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-0.5">
                 Start a simulation first
               </span>
             )}
@@ -538,14 +538,14 @@ export default function SimulationPage() {
                   className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all ${
                     isSelected
                       ? colorActiveMap[color]
-                      : `bg-white ${colorMap[color]}`
+                      : `bg-card ${colorMap[color]}`
                   }`}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="text-[12px] font-semibold leading-tight">
                     {label}
                   </span>
-                  <span className="text-[10px] text-gray-500 leading-tight">
+                  <span className="text-[10px] text-muted-foreground leading-tight">
                     {desc}
                   </span>
                 </button>
@@ -555,16 +555,16 @@ export default function SimulationPage() {
 
           {/* Config Row */}
           {selectedAnomaly && (
-            <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-gray-200/40">
+            <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-border/40">
               {/* Node selector */}
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-gray-500 uppercase tracking-wider">
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">
                   Target Node
                 </label>
                 <select
                   value={selectedNode}
                   onChange={(e) => setSelectedNode(e.target.value)}
-                  className="bg-white border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-gray-900 outline-none focus:border-gray-500"
+                  className="bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-ring"
                 >
                   <option value="">Auto (default)</option>
                   {availableNodes.map((n) => (
@@ -577,9 +577,9 @@ export default function SimulationPage() {
 
               {/* Duration */}
               <div className="flex flex-col gap-1 min-w-32">
-                <label className="text-[11px] text-gray-500 uppercase tracking-wider">
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">
                   Duration:{" "}
-                  <span className="text-gray-900 font-semibold">
+                  <span className="text-foreground font-semibold">
                     {duration}s
                   </span>
                 </label>
@@ -598,7 +598,7 @@ export default function SimulationPage() {
               <button
                 onClick={handleInjectAnomaly}
                 disabled={!anySimRunning || injecting}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-gray-900 hover:bg-gray-800 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold bg-foreground hover:bg-foreground/90 text-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Zap className="w-3.5 h-3.5" />
                 {injecting
@@ -607,7 +607,7 @@ export default function SimulationPage() {
               </button>
 
               {lastInjected && (
-                <span className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+                <span className="text-[11px] text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-1">
                   ✓ {lastInjected}
                 </span>
               )}
@@ -617,10 +617,10 @@ export default function SimulationPage() {
 
         {/* ── Data & Results Storage ──────────────────────────────── */}
         {storageInfo && (
-          <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-3">
+          <div className="bg-card border border-border shadow-sm rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <Database className="h-4 w-4 text-gray-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 Data & Results Storage
               </p>
             </div>
@@ -666,17 +666,17 @@ export default function SimulationPage() {
                 color="gray"
               />
             </div>
-            <div className="pt-2 border-t border-gray-200/40 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono text-gray-500">
+            <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono text-muted-foreground">
               <div>
-                <span className="text-gray-500">GNN model:</span>{" "}
+                <span className="text-muted-foreground">GNN model:</span>{" "}
                 ml_training/gnn_model_complete.pt
               </div>
               <div>
-                <span className="text-gray-500">Best model:</span>{" "}
+                <span className="text-muted-foreground">Best model:</span>{" "}
                 ml_training/best_model.pt
               </div>
               <div>
-                <span className="text-gray-500">Backend models:</span>{" "}
+                <span className="text-muted-foreground">Backend models:</span>{" "}
                 mininetDashboard/backend/models/
               </div>
             </div>
@@ -689,14 +689,14 @@ export default function SimulationPage() {
           style={{ height: 700 }}
         >
           {/* Topology Graph */}
-          <div className="lg:col-span-3 bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+          <div className="lg:col-span-3 bg-card border border-border shadow-sm rounded-2xl overflow-hidden">
             <TopologyGraph />
           </div>
 
           {/* Lab Control Panel */}
           <div className="flex flex-col gap-4 overflow-y-auto">
-            <section className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-3">
+            <section className="bg-card border border-border shadow-sm rounded-2xl p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
                 Lab Status
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -705,21 +705,21 @@ export default function SimulationPage() {
                   active={!!status?.capture_running}
                   activeText="Active"
                   inactiveText="Idle"
-                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
+                  activeColor="text-foreground bg-green-500/10 border-green-500/30"
                 />
                 <StatusBadge
                   label="Traffic"
                   active={!!status?.traffic_running}
                   activeText="Running"
                   inactiveText="Idle"
-                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
+                  activeColor="text-foreground bg-green-500/10 border-green-500/30"
                 />
                 <StatusBadge
                   label="Relay"
                   active={!!status?.last_relay}
                   activeText="Ready"
                   inactiveText="Not done"
-                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
+                  activeColor="text-foreground bg-green-500/10 border-green-500/30"
                 />
                 <StatusBadge
                   label="Inference"
@@ -729,13 +729,13 @@ export default function SimulationPage() {
                     "Done"
                   }
                   inactiveText="Not run"
-                  activeColor="text-gray-900 bg-green-500/10 border-green-500/30"
+                  activeColor="text-foreground bg-green-500/10 border-green-500/30"
                 />
               </div>
               {status?.last_capture_id && (
-                <p className="mt-3 text-[11px] font-mono text-gray-500">
+                <p className="mt-3 text-[11px] font-mono text-muted-foreground">
                   Last ID:{" "}
-                  <span className="text-gray-900">
+                  <span className="text-foreground">
                     {status.last_capture_id}
                   </span>
                 </p>
@@ -858,7 +858,7 @@ export default function SimulationPage() {
                 full
               />
               {status?.last_relay?.collector_inbox && (
-                <p className="mt-2 text-[11px] font-mono text-gray-500 truncate">
+                <p className="mt-2 text-[11px] font-mono text-muted-foreground truncate">
                   → {status.last_relay.collector_inbox}
                 </p>
               )}
@@ -896,17 +896,17 @@ export default function SimulationPage() {
                   <InferenceStat
                     label="Severity"
                     value={status.last_inference.inference.severity}
-                    color="text-gray-900"
+                    color="text-foreground"
                   />
                   <InferenceStat
                     label="Risk"
                     value={status.last_inference.inference.risk_score}
-                    color="text-gray-900"
+                    color="text-foreground"
                   />
                   <InferenceStat
                     label="Flows"
                     value={`${status.last_inference.inference.suspicious_flows}/${status.last_inference.inference.total_flows}`}
-                    color="text-gray-600"
+                    color="text-muted-foreground"
                   />
                 </div>
               )}
@@ -943,12 +943,12 @@ function StatusBadge({
   activeColor: string;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2">
-      <span className="text-[10px] uppercase tracking-wider text-gray-500">
+    <div className="flex flex-col gap-0.5 rounded-lg border border-border bg-muted px-2.5 py-2">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span
-        className={`text-xs font-medium rounded px-1.5 py-0.5 w-fit border ${active ? activeColor : "text-gray-500 bg-transparent border-transparent"}`}
+        className={`text-xs font-medium rounded px-1.5 py-0.5 w-fit border ${active ? activeColor : "text-muted-foreground bg-transparent border-transparent"}`}
       >
         {active ? activeText : inactiveText}
       </span>
@@ -962,7 +962,7 @@ const accentMap: Record<string, string> = {
   orange: "border-l-orange-500",
 };
 const phaseTextMap: Record<string, string> = {
-  gray: "text-gray-600",
+  gray: "text-muted-foreground",
   green: "text-green-500",
   orange: "text-orange-500",
 };
@@ -984,7 +984,7 @@ function PhaseCard({
 }) {
   return (
     <section
-      className={`border border-gray-200 border-l-2 ${accentMap[accent]} bg-white rounded-xl p-4 flex flex-col gap-3 shadow-sm`}
+      className={`border border-border border-l-2 ${accentMap[accent]} bg-card rounded-xl p-4 flex flex-col gap-3 shadow-sm`}
     >
       <div>
         <div className="flex items-center gap-2 mb-0.5">
@@ -993,10 +993,10 @@ function PhaseCard({
           >
             PHASE {phase}
           </span>
-          <span className="text-[10px] text-gray-600">·</span>
-          <span className="text-xs font-medium text-gray-900">{title}</span>
+          <span className="text-[10px] text-muted-foreground">·</span>
+          <span className="text-xs font-medium text-foreground">{title}</span>
         </div>
-        <p className="text-[11px] text-gray-500 leading-snug">{description}</p>
+        <p className="text-[11px] text-muted-foreground leading-snug">{description}</p>
       </div>
       {children}
       {blockedReason && (
@@ -1031,9 +1031,9 @@ function ActionButton({
 }) {
   const base =
     "flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors disabled:cursor-not-allowed";
-  const solid = "bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-40";
+  const solid = "bg-foreground hover:bg-foreground/90 text-background disabled:opacity-40";
   const ghost =
-    "border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40";
+    "border border-border text-muted-foreground hover:bg-muted disabled:opacity-40";
   return (
     <button
       onClick={onClick}
@@ -1056,8 +1056,8 @@ function InferenceStat({
   color: string;
 }) {
   return (
-    <div className="flex flex-col items-center bg-gray-50 rounded-md px-1.5 py-1.5 border border-gray-200">
-      <span className="text-[9px] uppercase tracking-wider text-gray-600 mb-0.5">
+    <div className="flex flex-col items-center bg-muted rounded-md px-1.5 py-1.5 border border-border">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground mb-0.5">
         {label}
       </span>
       <span
@@ -1070,7 +1070,7 @@ function InferenceStat({
 }
 
 const storageColorMap: Record<string, string> = {
-  gray: "text-gray-600 border-gray-200 bg-gray-50",
+  gray: "text-muted-foreground border-border bg-muted",
   orange: "text-orange-600 border-orange-500/30 bg-orange-500/10",
   red: "text-red-600 border-red-500/30 bg-red-500/10",
 };
@@ -1099,10 +1099,10 @@ function StorageCard({
         <span className="text-[11px] font-semibold">{label}</span>
         <span className="ml-auto text-lg font-bold">{count}</span>
       </div>
-      <div className="text-[10px] text-gray-500 font-mono truncate">{path}</div>
+      <div className="text-[10px] text-muted-foreground font-mono truncate">{path}</div>
       {latest && (
         <div
-          className="text-[10px] text-gray-600 font-mono truncate"
+          className="text-[10px] text-muted-foreground font-mono truncate"
           title={latest}
         >
           Latest: {latest}

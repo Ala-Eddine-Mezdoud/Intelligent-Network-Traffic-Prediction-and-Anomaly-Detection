@@ -42,18 +42,18 @@ export default function SupportPage() {
               <Card key={item.href} className="h-full">
                 <CardHeader>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground">
                       <Icon className="h-5 w-5" />
                     </div>
                     <CardTitle>{item.title}</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-gray-600">{item.description}</p>
+                  <p className="text-sm text-muted-foreground">{item.description}</p>
                   <Button
                     asChild
                     variant="outline"
-                    className="border-gray-200 text-gray-900 hover:bg-gray-50"
+                    className="border-border text-foreground hover:bg-muted"
                   >
                     <Link href={item.href}>Open</Link>
                   </Button>
@@ -65,20 +65,20 @@ export default function SupportPage() {
 
         <div className={pageSection}>
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 text-gray-600">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted text-muted-foreground">
               <LifeBuoy className="h-6 w-6" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 Need more help?
               </h2>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Contact your platform administrator or open an internal ticket for
                 API, simulation, or GNN pipeline issues.
               </p>
               <a
                 href="mailto:support@netguard.local"
-                className="inline-flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-gray-600"
+                className="inline-flex items-center gap-2 text-sm font-medium text-foreground hover:text-muted-foreground"
               >
                 <Mail className="h-4 w-4" />
                 support@netguard.local

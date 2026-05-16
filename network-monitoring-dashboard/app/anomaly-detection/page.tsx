@@ -42,6 +42,8 @@ interface Anomaly {
   threat_type: string;
   severity: string;
   status: string;
+  node?: string;
+  confidence?: number;
 }
 
 export default function AnomalyDetection() {
@@ -95,8 +97,8 @@ export default function AnomalyDetection() {
     return (
       <DashboardLayout>
         <div className="mb-6 space-y-2">
-          <div className="h-8 w-48 rounded-lg metric-shimmer bg-gray-100" />
-          <div className="h-4 w-72 rounded-lg metric-shimmer bg-gray-100" />
+          <div className="h-8 w-48 rounded-lg metric-shimmer bg-muted" />
+          <div className="h-4 w-72 rounded-lg metric-shimmer bg-muted" />
         </div>
         <MetricCardSkeletonGrid count={3} className="mb-6" />
         <TableSkeleton rows={8} columns={6} />
@@ -118,7 +120,7 @@ export default function AnomalyDetection() {
         {/* Filters */}
         <div className="grid grid-cols-1 gap-3 md:gap-4 md:grid-cols-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search by IP or threat type..."
               value={searchTerm}
@@ -150,11 +152,12 @@ export default function AnomalyDetection() {
             <div className="overflow-x-auto -mx-4 md:mx-0">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-gray-200 hover:bg-transparent whitespace-nowrap">
+                  <TableRow className="border-border hover:bg-transparent whitespace-nowrap">
                     <TableHead className={tableHead}>Timestamp</TableHead>
                     <TableHead className={tableHead}>Source IP</TableHead>
-                    <TableHead className={tableHead}>Dest IP</TableHead>
                     <TableHead className={tableHead}>Threat</TableHead>
+                    <TableHead className={tableHead}>Affected Node</TableHead>
+                    <TableHead className={tableHead}>Confidence</TableHead>
                     <TableHead className={tableHead}>Severity</TableHead>
                     <TableHead className={tableHead}>Status</TableHead>
                   </TableRow>
@@ -165,17 +168,40 @@ export default function AnomalyDetection() {
                       key={anomaly.id}
                       className={cn(tableRow, "cursor-pointer whitespace-nowrap")}
                     >
-                      <TableCell className={cn(tableCell, "font-mono")}>
+                      <TableCell className={cn(tableCell, "font-mono text-xs")}>
                         {anomaly.timestamp}
                       </TableCell>
                       <TableCell className={cn(tableCell, "font-mono")}>
                         {anomaly.source_ip}
                       </TableCell>
-                      <TableCell className={cn(tableCell, "font-mono")}>
-                        {anomaly.dest_ip}
-                      </TableCell>
                       <TableCell className={tableCell}>
                         {anomaly.threat_type}
+                      </TableCell>
+                      <TableCell className={tableCell}>
+                        {anomaly.node ? (
+                          <Badge
+                            variant="outline"
+                            className="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono text-xs"
+                          >
+                            {anomaly.node}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className={tableCell}>
+                        {anomaly.confidence != null ? (
+                          <span className={cn(
+                            "font-medium text-sm",
+                            anomaly.confidence >= 0.8 ? "text-red-500" :
+                            anomaly.confidence >= 0.6 ? "text-orange-500" :
+                            "text-muted-foreground"
+                          )}>
+                            {Math.round(anomaly.confidence * 100)}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs md:text-sm px-2 md:px-4">
                         <Badge
@@ -200,7 +226,7 @@ export default function AnomalyDetection() {
             </div>
             {filteredAnomalies.length === 0 && (
               <div className="py-8 text-center">
-                <p className="text-gray-500">
+                <p className="text-muted-foreground">
                   No anomalies match your search criteria
                 </p>
               </div>

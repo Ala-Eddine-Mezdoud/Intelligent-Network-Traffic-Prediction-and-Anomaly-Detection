@@ -25,7 +25,7 @@ export function DashboardLayout({
   const [sidebarCompact, setSidebarCompact] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
 
       <SidebarNav
         open={sidebarOpen}

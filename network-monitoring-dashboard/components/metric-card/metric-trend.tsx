@@ -23,7 +23,7 @@ const trendIcon = {
 const trendColor: Record<Trend, string> = {
   up: healthAccent.healthy.text,
   down: healthAccent.critical.text,
-  stable: "text-gray-500",
+  stable: "text-muted-foreground",
 };
 
 export function MetricTrend({
@@ -44,14 +44,14 @@ export function MetricTrend({
 
   return (
     <motion.div
-      className="flex items-center gap-2 text-xs text-gray-500"
+      className="flex items-center gap-2 text-xs text-muted-foreground"
       initial={{ opacity: 0, x: -4 }}
       animate={{ opacity: 1, x: 0 }}
       transition={fadeUp}
     >
       <motion.span
         className={cn(
-          "inline-flex items-center justify-center rounded-md bg-gray-50 p-1",
+          "inline-flex items-center justify-center rounded-md bg-muted p-1",
           color,
         )}
         animate={

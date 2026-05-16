@@ -129,15 +129,15 @@ export default function DataGenerationPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">
+                      <span className="text-muted-foreground">
                         Current Scenario
                       </span>
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-foreground">
                         {status.current_scenario || "Starting..."}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">
+                      <span className="text-muted-foreground">
                         Current Phase
                       </span>
                       <span className="font-medium">
@@ -157,13 +157,13 @@ export default function DataGenerationPage() {
               )}
 
               {!status?.running && status?.last_error && !uiError && (
-                <div className="p-3 rounded-md border border-gray-200 bg-gray-50 text-gray-600 text-sm">
+                <div className="p-3 rounded-md border border-border bg-muted text-muted-foreground text-sm">
                   Last run failed: {status.last_error}
                 </div>
               )}
 
               {uiError && (
-                <div className="p-3 rounded-md border border-gray-200 bg-gray-50 text-gray-600 text-sm">
+                <div className="p-3 rounded-md border border-border bg-muted text-muted-foreground text-sm">
                   {uiError}
                 </div>
               )}
@@ -208,10 +208,10 @@ export default function DataGenerationPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/50">
                   <div className="flex items-center gap-3">
-                    <Clock className="h-5 w-5 text-gray-500" />
+                    <Clock className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="font-medium">Window Interval</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         Telemetry sampling rate
                       </p>
                     </div>
@@ -221,10 +221,10 @@ export default function DataGenerationPage() {
 
                 <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/50">
                   <div className="flex items-center gap-3">
-                    <Activity className="h-5 w-5 text-gray-500" />
+                    <Activity className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="font-medium">Prediction Horizons</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         Look-ahead labeling
                       </p>
                     </div>
@@ -234,10 +234,10 @@ export default function DataGenerationPage() {
 
                 <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/50">
                   <div className="flex items-center gap-3">
-                    <Database className="h-5 w-5 text-gray-500" />
+                    <Database className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="font-medium">Scenario Library</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         Scripted anomaly patterns
                       </p>
                     </div>
@@ -271,7 +271,7 @@ export default function DataGenerationPage() {
           </CardHeader>
           <CardContent>
             {datasets.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-muted-foreground">
                 No datasets generated yet. Run a capture to create one.
               </div>
             ) : (
@@ -283,13 +283,13 @@ export default function DataGenerationPage() {
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <FileJson className="h-5 w-5 text-gray-600" />
+                        <FileJson className="h-5 w-5 text-muted-foreground" />
                         <span className="font-medium">{ds.run_id}</span>
                         <Badge variant="secondary" className="text-xs">
                           {ds.summary?.scenario_name || "multi"}
                         </Badge>
                       </div>
-                      <div className="text-sm text-gray-500 mt-2">
+                      <div className="text-sm text-muted-foreground mt-2">
                         <span className="mr-4">
                           Windows:{" "}
                           <strong>{ds.summary?.total_windows || 0}</strong>
@@ -305,7 +305,7 @@ export default function DataGenerationPage() {
                       </div>
                     </div>
                     <div className="text-right space-y-2">
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-muted-foreground">
                         {ds.path}
                       </div>
                       {ds.summary?.current_label_distribution && (

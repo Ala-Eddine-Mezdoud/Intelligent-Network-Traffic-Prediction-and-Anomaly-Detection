@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
 import {
   ComposedChart,
   Line,
@@ -13,7 +14,13 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CHART_STROKE, chartTooltipStyle, mutedBadge } from "@/lib/ui-theme";
+import {
+  CHART_STROKE,
+  CHART_STROKE_DARK,
+  chartTooltipStyle,
+  chartTooltipStyleDark,
+  mutedBadge,
+} from "@/lib/ui-theme";
 import { cn } from "@/lib/utils";
 import { ChartSkeleton } from "@/components/skeletons";
 import { hoverLift, springSoft } from "@/lib/motion";
@@ -33,6 +40,11 @@ export function TrafficPredictionChart({
   showLiveBadge = false,
   isLoading = false,
 }: TrafficPredictionChartProps) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const stroke = isDark ? CHART_STROKE_DARK : CHART_STROKE;
+  const tooltipStyle = isDark ? chartTooltipStyleDark : chartTooltipStyle;
+
   if (isLoading) {
     return <ChartSkeleton height={height} className="mb-4" />;
   }
@@ -64,30 +76,30 @@ export function TrafficPredictionChart({
               animate={{ opacity: 1 }}
               className="flex h-48 flex-col items-center justify-center gap-2"
             >
-              <p className="text-lg font-medium text-gray-900">No data available</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-lg font-medium text-foreground">No data available</p>
+              <p className="text-sm text-muted-foreground">
                 Start a simulation to see traffic predictions
               </p>
             </motion.div>
           ) : (
             <ResponsiveContainer width="100%" height={height}>
               <ComposedChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_STROKE.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={stroke.grid} />
                 <XAxis
                   dataKey="time"
-                  stroke={CHART_STROKE.axis}
-                  tick={{ fill: CHART_STROKE.axis, fontSize: 11 }}
+                  stroke={stroke.axis}
+                  tick={{ fill: stroke.axis, fontSize: 11 }}
                 />
                 <YAxis
-                  stroke={CHART_STROKE.axis}
-                  tick={{ fill: CHART_STROKE.axis, fontSize: 11 }}
+                  stroke={stroke.axis}
+                  tick={{ fill: stroke.axis, fontSize: 11 }}
                 />
-                <Tooltip contentStyle={chartTooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 12, color: "#6b7280" }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12, color: stroke.axis }} />
                 <Area
                   type="monotone"
                   dataKey="upper"
-                  fill={CHART_STROKE.confidence}
+                  fill={stroke.confidence}
                   stroke="none"
                   name="Confidence range"
                   legendType="none"
@@ -95,8 +107,8 @@ export function TrafficPredictionChart({
                 <Line
                   type="monotone"
                   dataKey="historical"
-                  stroke={CHART_STROKE.historical}
-                  dot={{ fill: CHART_STROKE.historical, r: 2 }}
+                  stroke={stroke.historical}
+                  dot={{ fill: stroke.historical, r: 2 }}
                   activeDot={{ r: 4 }}
                   strokeWidth={2}
                   name="Historical"
@@ -104,7 +116,7 @@ export function TrafficPredictionChart({
                 <Line
                   type="monotone"
                   dataKey="predicted"
-                  stroke={CHART_STROKE.predicted}
+                  stroke={stroke.predicted}
                   strokeDasharray="6 4"
                   dot={false}
                   strokeWidth={2}

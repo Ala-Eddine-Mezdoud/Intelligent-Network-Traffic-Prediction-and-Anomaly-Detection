@@ -21,7 +21,7 @@ export function AlertsListSkeleton({ count = 4 }: AlertsListSkeletonProps) {
           key={i}
           variants={fadeUp}
           custom={i}
-          className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm md:p-6"
+          className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-6"
         >
           <div className="flex items-start gap-4">
             <ShimmerBlock className="h-6 w-16 rounded-full" />
