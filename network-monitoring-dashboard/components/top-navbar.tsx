@@ -26,8 +26,13 @@ export function TopNavbar({
 }: TopNavbarProps) {
   const [alertCount, setAlertCount] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const tick = () => setCurrentTime(new Date().toLocaleTimeString());
@@ -144,10 +149,15 @@ export function TopNavbar({
           variant="ghost"
           size="sm"
           className="relative text-muted-foreground hover:text-foreground hover:bg-accent"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
           aria-label="Toggle theme"
+          suppressHydrationWarning
         >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {mounted ? (
+            resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />
+          ) : (
+            <Sun className="h-4 w-4 opacity-0" />
+          )}
         </Button>
 
         <Button
